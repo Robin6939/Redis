@@ -18,7 +18,7 @@ public class Main {
       // Wait for connection from client.
       clientSocket = serverSocket.accept();
       OutputStream outputStream = clientSocket.getOutputStream();
-      outputStream.write("+PONG\r\n");
+      outputStream.write("+PONG\r\n".getBytes());
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
     } finally {
