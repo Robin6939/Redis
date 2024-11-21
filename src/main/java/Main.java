@@ -24,11 +24,8 @@ public class Main {
       InputStream inputStream = (clientSocket.getInputStream());
       OutputStream outputStream = clientSocket.getOutputStream();
       // DataOutputStream os = new DataOutputStream(outputStream);
-      while(true) {
-        int line = inputStream.read();
-        System.out.println("Data received : " + line);
+      while(inputStream.read()!=-1) {
         outputStream.write("+PONG\r\n".getBytes());
-        // os.writeUTF("+PONG\r\n");
       }
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
