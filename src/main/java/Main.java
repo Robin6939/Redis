@@ -19,11 +19,11 @@ public class Main {
       serverSocket.setReuseAddress(true);
       clientSocket = serverSocket.accept();
       DataInputStream inputStream = new DataInputStream(System.in);
-      DataOutputStream outputStream = new DataOutputStream(clientSocket.getOutputStream());
+      OutputStream outputStream = clientSocket.getOutputStream();
       while(true) {
         String line = inputStream.readUTF().toString();
         System.out.println("Data received : " + line);
-        outputStream.writeUTF("+PONG\r\n");
+        outputStream.write("+PONG\r\n".getBytes());
       }
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
