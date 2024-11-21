@@ -23,7 +23,7 @@ public class Main {
       while(true) {
         String line = inputStream.readUTF().toString();
         System.out.println("Data received : " + line);
-        outputStream.write("+PONG\r\n");
+        outputStream.writeUTF("+PONG\r\n");
       }
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
