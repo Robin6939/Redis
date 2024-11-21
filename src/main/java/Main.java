@@ -17,13 +17,17 @@ public class Main {
     try {
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
+      System.out.println("Tyring to connect");
       clientSocket = serverSocket.accept();
-      DataInputStream inputStream = new DataInputStream(System.in);
+      System.out.println("Connection established");
+      DataInputStream inputStream = new DataInputStream(clientSocket.getInputStream());
       OutputStream outputStream = clientSocket.getOutputStream();
+      // DataOutputStream os = new DataOutputStream(outputStream);
       while(true) {
         String line = inputStream.readUTF().toString();
         System.out.println("Data received : " + line);
         outputStream.write("+PONG\r\n".getBytes());
+        // os.writeUTF("+PONG\r\n");
       }
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
