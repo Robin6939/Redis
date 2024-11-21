@@ -3,6 +3,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -20,11 +21,11 @@ public class Main {
       System.out.println("Tyring to connect");
       clientSocket = serverSocket.accept();
       System.out.println("Connection established");
-      DataInputStream inputStream = new DataInputStream(clientSocket.getInputStream());
+      InputStream inputStream = (clientSocket.getInputStream());
       OutputStream outputStream = clientSocket.getOutputStream();
       // DataOutputStream os = new DataOutputStream(outputStream);
       while(true) {
-        String line = inputStream.readUTF().toString();
+        int line = inputStream.read();
         System.out.println("Data received : " + line);
         outputStream.write("+PONG\r\n".getBytes());
         // os.writeUTF("+PONG\r\n");
