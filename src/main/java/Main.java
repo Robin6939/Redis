@@ -10,6 +10,7 @@ public class Main extends Thread  {
 
   static Vector<Socket> v = new Vector<>();
   static int size = 0;
+  static Boolean master = true;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
@@ -103,7 +104,10 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("INFO")) {
             if(command.get(1).equalsIgnoreCase("REPLICATION")) {
-              out.write(encodeRESP("role:master").getBytes());
+              if(master)
+                out.write(encodeRESP("role:master").getBytes());
+              else
+                out.write(encodeRESP("role:slave").getBytes());
             }
           }
         }
@@ -128,10 +132,12 @@ public class Main extends Thread  {
 
   public static void main(String[] args){
     System.out.println("Logs from your program will appear here!");
-
+    
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
     int port = args.length==0?6379:Integer.parseInt(args[1]);
+    if(args.length>3 && args[2].equals("--replicaof"))
+      master = false;
     try {
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
