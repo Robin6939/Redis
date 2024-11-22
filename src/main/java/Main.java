@@ -50,7 +50,7 @@ public class Main extends Thread  {
   public void run() {
     Socket s = getSocket();
     try (InputStream in = s.getInputStream()) {
-      DataOutputStream out = new DataOutputStream(s.getOutputStream());
+      OutputStream out = (s.getOutputStream());
       while(true) {
         in.read();
         in.read();
@@ -63,11 +63,11 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
             String send = encodeRESP(command.get(1));
-            out.writeUTF(send);
+            out.write(send.getBytes());
           }
           if(command.get(0).equalsIgnoreCase("PING")) {
             System.out.println("It is an PING command");
-            out.writeUTF("+PONG\r\n");
+            out.write("+PONG\r\n".getBytes());
           }
         }
         else {
