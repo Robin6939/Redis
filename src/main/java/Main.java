@@ -126,7 +126,7 @@ public class Main extends Thread  {
 
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
-    int port = args.length!=1?Integer.parseInt(args[1]):6379;
+    int port = args.length==0?6379:Integer.parseInt(args[1]);
     try {
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
