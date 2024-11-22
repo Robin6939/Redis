@@ -4,6 +4,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.HashMap;
 import java.util.Vector;
 
 public class Main extends Thread  {
@@ -65,6 +66,7 @@ public class Main extends Thread  {
 
   public void run() {
     Socket s = getSocket();
+    HashMap<String, String> map = new HashMap<>();
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
@@ -84,6 +86,16 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("PING")) {
             System.out.println("It is an PING command");
             out.write("+PONG\r\n".getBytes());
+          }
+          if(command.get(0).equalsIgnoreCase("SET")) {
+            System.out.println("It is a SET command");
+            map.put(command.get(1), command.get(2));
+            out.write(encodeRESP("OK").getBytes());
+          }
+          if(command.get(0).equalsIgnoreCase("GET")) {
+            System.out.println("It is a GET command");
+            String send = map.get(command.get(1));
+            out.write(encodeRESP(send).getBytes());
           }
         }
         else {
