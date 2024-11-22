@@ -12,17 +12,32 @@ public class Main extends Thread  {
   static int size = 0;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
-    int x = in.read() - (int)'0';
+
+    int x = 0;
+    char ch = (char)in.read();
+    while(ch!='\r') {
+      int x1 = (int)ch - (int)'0';
+      x = x*10 + x1;
+      ch = (char)in.read();
+    }
+    // int x = in.read() - (int)'0';
     System.out.println("Size of the command: "+x);
     while(x-->0) {
-      int skip = 5;
+      int skip = 2;
       while(skip-->0) {
         System.out.println("Skip");
         in.read();
+      } 
+      char ch1 = (char)in.read();
+      int y = 0;
+      while(ch1!='\r') {
+        int y1 = (int)ch1 - (int)'0';
+        y = y*10 + y1;
+        ch1 = (char)in.read();
       }
-      int y = in.read() - (int)'0';
+      // int y = in.read() - (int)'0';
       System.out.println("Lenght of the next element in the command vector: "+y);
-      skip = 4;
+      skip = 1;
       while(skip-->0) {
         System.out.println("Skip");
         in.read();
@@ -31,10 +46,11 @@ public class Main extends Thread  {
       while(y-->0) {
         s=s+(char)in.read();
       }
+      in.read();
       System.out.println(s);
       command.addElement(s);
     }
-    int skip = 4;
+    int skip = 1;
     while(skip-->0) {
       System.out.println("Skip");
       in.read();
@@ -43,7 +59,7 @@ public class Main extends Thread  {
 
   public String encodeRESP(String s) {
     int size = s.length();
-    String ret = "$" + size + "\\r\\n" + s + "\\r\\n";
+    String ret = "$" + size + "\r\n" + s + "\r\n";
     return ret;
   }
 
