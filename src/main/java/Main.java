@@ -1,4 +1,3 @@
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -127,7 +126,7 @@ public class Main extends Thread  {
 
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
-    int port = 6379;
+    int port = args.length!=1?Integer.parseInt(args[1]):6379;
     try {
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
