@@ -13,30 +13,30 @@ public class Main extends Thread  {
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = in.read() - (int)'0';
-    // System.out.println("Size of the command: "+x);
+    System.out.println("Size of the command: "+x);
     while(x-->0) {
       int skip = 5;
       while(skip-->0) {
-        // System.out.println("Skip");
+        System.out.println("Skip");
         in.read();
       }
       int y = in.read() - (int)'0';
-      // System.out.println("Lenght of the next element in the command vector: "+y);
+      System.out.println("Lenght of the next element in the command vector: "+y);
       skip = 4;
       while(skip-->0) {
-        // System.out.println("Skip");
+        System.out.println("Skip");
         in.read();
       }
       String s="";
       while(y-->0) {
         s=s+(char)in.read();
       }
-      // System.out.println(s);
+      System.out.println(s);
       command.addElement(s);
     }
     int skip = 4;
     while(skip-->0) {
-      // System.out.println("Skip");
+      System.out.println("Skip");
       in.read();
     }
   }
