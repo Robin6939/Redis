@@ -55,7 +55,7 @@ public class Main extends Thread  {
         // in.read();
         // in.read();
         char ch = (char)in.read();
-        // System.out.println(ch);
+        System.out.println(ch);
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
