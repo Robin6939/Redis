@@ -101,6 +101,11 @@ public class Main extends Thread  {
             }
             out.write(encodeRESP(send).getBytes());
           }
+          if(command.get(0).equalsIgnoreCase("INFO")) {
+            if(command.get(1).equalsIgnoreCase("REPLICATION")) {
+              out.write(encodeRESP("role:master").getBytes());
+            }
+          }
         }
       }
     } catch (IOException e) {
