@@ -13,7 +13,6 @@ public class Main extends Thread  {
   static int size = 0;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
-
     int x = 0;
     char ch = (char)in.read();
     while(ch!='\r') {
@@ -21,12 +20,9 @@ public class Main extends Thread  {
       x = x*10 + x1;
       ch = (char)in.read();
     }
-    // int x = in.read() - (int)'0';
-    System.out.println("Size of the command: "+x);
     while(x-->0) {
       int skip = 2;
       while(skip-->0) {
-        System.out.println("Skip");
         in.read();
       } 
       char ch1 = (char)in.read();
@@ -36,11 +32,8 @@ public class Main extends Thread  {
         y = y*10 + y1;
         ch1 = (char)in.read();
       }
-      // int y = in.read() - (int)'0';
-      System.out.println("Lenght of the next element in the command vector: "+y);
       skip = 1;
       while(skip-->0) {
-        System.out.println("Skip");
         in.read();
       }
       String s="";
@@ -48,12 +41,10 @@ public class Main extends Thread  {
         s=s+(char)in.read();
       }
       in.read();
-      System.out.println(s);
       command.addElement(s);
     }
     int skip = 1;
     while(skip-->0) {
-      System.out.println("Skip");
       in.read();
     }
   }
@@ -70,10 +61,7 @@ public class Main extends Thread  {
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
-        // in.read();
-        // in.read();
         char ch = (char)in.read();
-        System.out.println(ch);
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
@@ -91,15 +79,29 @@ public class Main extends Thread  {
             System.out.println("It is a SET command");
             map.put(command.get(1), command.get(2));
             out.write(encodeRESP("OK").getBytes());
+            if(command.size()>3) {
+              int ms = Integer.parseInt(command.get(4));
+              Thread t = new Thread() {
+                public void run() {
+                  try {
+                    Thread.sleep(ms);
+                    map.remove(command.get(1));
+                  } catch (InterruptedException e) {
+                    System.out.println(e);
+                  }
+                }
+              };
+              t.start();
+            }
           }
           if(command.get(0).equalsIgnoreCase("GET")) {
             System.out.println("It is a GET command");
             String send = map.get(command.get(1));
+            if(send==null) {
+              out.write("$-1\r\n".getBytes());
+            }
             out.write(encodeRESP(send).getBytes());
           }
-        }
-        else {
-          System.out.println("This is the incorrect Command");
         }
       }
     } catch (IOException e) {
