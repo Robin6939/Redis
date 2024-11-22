@@ -52,8 +52,8 @@ public class Main extends Thread  {
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
-        in.read();
-        in.read();
+        // in.read();
+        // in.read();
         char ch = (char)in.read();
         // System.out.println(ch);
         if(ch=='*') {
