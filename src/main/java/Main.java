@@ -14,6 +14,8 @@ public class Main extends Thread  {
   static Boolean master = true;
   static int masterPort = -1;
   static String masterHost = "";
+  static String replica = "";
+  static int port = 0;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
@@ -155,7 +157,7 @@ public class Main extends Thread  {
     
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
-    int port = args.length==0?6379:Integer.parseInt(args[1]);
+    port = args.length==0?6379:Integer.parseInt(args[1]);
     if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave
       master = false;
       System.out.println(args[3]);
@@ -187,7 +189,6 @@ public class Main extends Thread  {
       }
       String[] psync = {"PSYNC", "?", "-1"};
       outMaster.write(encodeRESPArr(psync).getBytes());
-      String replica = "";
       skip=12;
       while(skip-->0){
         inMaster.read();
