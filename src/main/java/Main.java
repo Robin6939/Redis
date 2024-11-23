@@ -135,6 +135,10 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
             out.write("+OK\r\n".getBytes());
           }
+          if(command.get(0).equalsIgnoreCase("PSYNC")) {
+            String toSend = "+FULLRESYNC " + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" + " 0\r\n";
+            out.write(toSend.getBytes());
+          }
         }
       }
     } catch (IOException e) {
