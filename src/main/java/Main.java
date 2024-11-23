@@ -3,6 +3,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Vector;
 
@@ -11,6 +12,8 @@ public class Main extends Thread  {
   static Vector<Socket> v = new Vector<>();
   static int size = 0;
   static Boolean master = true;
+  static int masterPort = -1;
+  static String masterHost = "";
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
@@ -49,7 +52,7 @@ public class Main extends Thread  {
     }
   }
 
-  public String encodeRESPArr(String[] arr) {
+  public static String encodeRESPArr(String[] arr) {
     int n = arr.length;
     String send = "*" + n + "\r\n";
     for(String s:arr) {
@@ -58,7 +61,7 @@ public class Main extends Thread  {
     return send;
   }
 
-  public String encodeRESP(String s) {
+  public static String encodeRESP(String s) {
     int size = s.length();
     String ret = "$" + size + "\r\n" + s + "\r\n";
     return ret;
@@ -69,11 +72,13 @@ public class Main extends Thread  {
     HashMap<String, String> map = new HashMap<>();
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
+      // System.out.println(master);
       while(true) {
         char ch = (char)in.read();
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
+
           System.out.println(command);
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
@@ -145,15 +150,28 @@ public class Main extends Thread  {
   }
 
 
-  public static void main(String[] args){
+  public static void main(String[] args) throws UnknownHostException, IOException{
     System.out.println("Logs from your program will appear here!");
     
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
     int port = args.length==0?6379:Integer.parseInt(args[1]);
-    if(args.length>3 && args[2].equals("--replicaof"))
+    if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave
       master = false;
+      System.out.println(args[3]);
+      masterHost = args[3].substring(0, args[3].length()-5);
+      masterPort = Integer.parseInt(args[3].substring(args[3].length()-4));
+      System.out.println(masterHost+" "+masterPort);
+      System.out.println("This is a slave sending ping to master");
+      Socket masterSocket = new Socket(masterHost, masterPort);
+      OutputStream outMaster = (masterSocket.getOutputStream());
+      String[] arr = {"PING"};
+      System.out.println(encodeRESPArr(arr));
+      outMaster.write(encodeRESPArr(arr).getBytes());
+      masterSocket.close();
+    }
     try {
+      System.out.println("checkpoint 1");
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
       while(true) {
