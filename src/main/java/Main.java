@@ -132,6 +132,9 @@ public class Main extends Thread  {
               }
             }
           }
+          if(command.get(0).equalsIgnoreCase("REPLCONF")) {
+            out.write("+OK\r\n".getBytes());
+          }
         }
       }
     } catch (IOException e) {
@@ -158,13 +161,13 @@ public class Main extends Thread  {
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
     port = args.length==0?6379:Integer.parseInt(args[1]);
+
+
     if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave
       master = false;
       System.out.println(args[3]);
       masterHost = args[3].substring(0, args[3].length()-5);
       masterPort = Integer.parseInt(args[3].substring(args[3].length()-4));
-      System.out.println(masterHost+" "+masterPort);
-      System.out.println("This is a slave sending ping to master");
       Socket masterSocket = new Socket(masterHost, masterPort);
       OutputStream outMaster = (masterSocket.getOutputStream());
       InputStream inMaster = masterSocket.getInputStream();
@@ -205,6 +208,10 @@ public class Main extends Thread  {
       }
       masterSocket.close();
     }
+
+
+
+
     try {
       System.out.println("checkpoint 1");
       serverSocket = new ServerSocket(port);
