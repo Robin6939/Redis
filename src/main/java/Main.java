@@ -49,6 +49,15 @@ public class Main extends Thread  {
     }
   }
 
+  public String encodeRESPArr(String[] arr) {
+    int n = arr.length;
+    String send = "*" + n + "\r\n";
+    for(String s:arr) {
+      send += encodeRESP(s);
+    }
+    return send;
+  }
+
   public String encodeRESP(String s) {
     int size = s.length();
     String ret = "$" + size + "\r\n" + s + "\r\n";
@@ -104,10 +113,16 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("INFO")) {
             if(command.get(1).equalsIgnoreCase("REPLICATION")) {
-              if(master)
-                out.write(encodeRESP("role:master").getBytes());
-              else
-                out.write(encodeRESP("role:slave").getBytes());
+              if(master) {
+                String send = "role:master\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\nmaster_repl_offset:0";
+                String toSend = encodeRESP(send);
+                out.write(toSend.getBytes());
+              }
+              else {
+                String send = "role:slave\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\nmaster_repl_offset:0";
+                String toSend = encodeRESP(send);
+                out.write(toSend.getBytes());
+              }
             }
           }
         }
