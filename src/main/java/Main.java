@@ -165,9 +165,26 @@ public class Main extends Thread  {
       System.out.println("This is a slave sending ping to master");
       Socket masterSocket = new Socket(masterHost, masterPort);
       OutputStream outMaster = (masterSocket.getOutputStream());
+      InputStream inMaster = masterSocket.getInputStream();
       String[] arr = {"PING"};
       System.out.println(encodeRESPArr(arr));
       outMaster.write(encodeRESPArr(arr).getBytes());
+      int skip = 7;
+      while(skip-->0) { //skip ok response
+        inMaster.read();
+      }
+      String[] repl1 = {"REPLCONF", "listening-port", port+""};
+      outMaster.write(encodeRESPArr(repl1).getBytes());
+      skip = 5;
+      while(skip-->0) { //skip ok response
+        inMaster.read();
+      }
+      String[] repl2 = {"REPLCONF", "capa", "psync2"};
+      outMaster.write(encodeRESPArr(repl2).getBytes());
+      skip = 5;
+      while(skip-->0) { //skip ok response
+        inMaster.read();
+      }
       masterSocket.close();
     }
     try {
