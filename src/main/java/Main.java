@@ -185,6 +185,23 @@ public class Main extends Thread  {
       while(skip-->0) { //skip ok response
         inMaster.read();
       }
+      String[] psync = {"PSYNC", "?", "-1"};
+      outMaster.write(encodeRESPArr(psync).getBytes());
+      String replica = "";
+      skip=12;
+      while(skip-->0){
+        inMaster.read();
+      }
+      int repcount = 40;
+      while(repcount-->0) {
+        char ch = (char)inMaster.read();
+        replica = replica+ch;
+      }
+      System.out.println("replica id is: "+replica);
+      skip = 4;
+      while(skip-->0) {
+        inMaster.read();
+      }
       masterSocket.close();
     }
     try {
