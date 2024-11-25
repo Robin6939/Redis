@@ -4,7 +4,9 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.Base64;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Vector;
 
 public class Main extends Thread  {
@@ -68,6 +70,26 @@ public class Main extends Thread  {
     String ret = "$" + size + "\r\n" + s + "\r\n";
     return ret;
   }
+
+  public static String convertToBulkString(String s) {
+    int n = s.length();
+    return "$"+n+"\r\n"+s;
+  }
+
+  public static String convertStringToBinary(String input) {
+
+    StringBuilder result = new StringBuilder();
+    char[] chars = input.toCharArray();
+    for (char aChar : chars) {
+        result.append(
+                String.format("%8s", Integer.toBinaryString(aChar))   // char -> int, auto-cast
+                        .replaceAll(" ", "0")                         // zero pads
+        );
+    }
+    return result.toString();
+
+  }
+
 
   public void run() {
     Socket s = getSocket();
@@ -138,6 +160,10 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("PSYNC")) {
             String toSend = "+FULLRESYNC " + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" + " 0\r\n";
             out.write(toSend.getBytes());
+            byte[] contents = HexFormat.of().parseHex(
+                "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2");
+            out.write(("$"+contents.length+"\r\n").getBytes());
+            out.write(contents);
           }
         }
       }
