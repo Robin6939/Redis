@@ -79,20 +79,6 @@ public class Main extends Thread  {
     return "$"+n+"\r\n"+s;
   }
 
-  public static String convertStringToBinary(String input) {
-
-    StringBuilder result = new StringBuilder();
-    char[] chars = input.toCharArray();
-    for (char aChar : chars) {
-        result.append(
-                String.format("%8s", Integer.toBinaryString(aChar))   // char -> int, auto-cast
-                        .replaceAll(" ", "0")                         // zero pads
-        );
-    }
-    return result.toString();
-
-  }
-
   public static void sendToReplica(Vector<String> command) throws IOException {
     String toSend = "";
     String arr[] = new String[command.size()];
@@ -110,7 +96,6 @@ public class Main extends Thread  {
 
   public void run() {
     Socket s = getSocket();
-    // HashMap<String, String> map = new HashMap<>();
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
@@ -185,8 +170,15 @@ public class Main extends Thread  {
             if(command.get(1).equalsIgnoreCase("listening-port")) {
               System.out.println("New replica added to the current master");
               replicaSockets.add(s);
+              out.write("+OK\r\n".getBytes());
             }
-            out.write("+OK\r\n".getBytes());
+            else if(command.get(1).equalsIgnoreCase("capa")) {
+              out.write("+OK\r\n".getBytes());
+            }
+            else if(command.get(1).equalsIgnoreCase("GETACK")) {
+              String toSend[] = {"REPLCONF", "ACK", "0"};
+              out.write(encodeRESPArr(toSend).getBytes());
+            }
           }
           if(command.get(0).equalsIgnoreCase("PSYNC")) {
             String toSend = "+FULLRESYNC " + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" + " 0\r\n";
