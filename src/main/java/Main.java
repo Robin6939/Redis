@@ -20,6 +20,7 @@ public class Main extends Thread  {
   static int port = 0;
   static HashSet<Socket> replicaSockets = new HashSet<>();
   static Socket masterSocket;
+  static HashMap<String, String> map = new HashMap<>();
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
@@ -109,17 +110,15 @@ public class Main extends Thread  {
 
   public void run() {
     Socket s = getSocket();
-    HashMap<String, String> map = new HashMap<>();
+    // HashMap<String, String> map = new HashMap<>();
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
-      // System.out.println(master);
       while(true) {
         char ch = (char)in.read();
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
-
-          System.out.println(command);
+          System.out.println("Received the following command: " + command);
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
             String send = encodeRESP(command.get(1));
@@ -135,6 +134,9 @@ public class Main extends Thread  {
             map.put(command.get(1), command.get(2));
             if(s.equals(masterSocket)==false) {
               out.write(encodeRESP("OK").getBytes());
+            }
+            else {
+              System.out.println("Received a command which was propagated by master which is: "+ command);
             }
             if(command.size()>3) {
               int ms = Integer.parseInt(command.get(4));
@@ -153,11 +155,17 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("GET")) {
             System.out.println("It is a GET command");
+            System.out.println("Current map of data is: "+ map);
+            System.out.println("c1");
             String send = map.get(command.get(1));
-            if(send==null) {
+            if(send==null || send.length()==0) {
+              System.out.println("Didn't find in the current map");
               out.write("$-1\r\n".getBytes());
             }
-            out.write(encodeRESP(send).getBytes());
+            else {
+              System.out.println("Sending the following: "+send);
+              out.write(encodeRESP(send).getBytes());
+            }
           }
           if(command.get(0).equalsIgnoreCase("INFO")) {
             if(command.get(1).equalsIgnoreCase("REPLICATION")) {
@@ -175,6 +183,7 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
             if(command.get(1).equalsIgnoreCase("listening-port")) {
+              System.out.println("New replica added to the current master");
               replicaSockets.add(s);
             }
             out.write("+OK\r\n".getBytes());
@@ -258,6 +267,10 @@ public class Main extends Thread  {
       while(skip-->0) {
         inMaster.read();
       }
+      System.out.println("This is a replica whose master is at port: " + masterPort);
+      addSocket(masterSocket);
+      Main t = new Main();
+      t.start();
     }
     try {
       System.out.println("checkpoint 1");
