@@ -212,7 +212,7 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("WAIT")) {
             int numReplicas = Integer.parseInt(command.get(1));
             int timeout = Integer.parseInt(command.get(2));
-            out.write(toRESPInt(0).getBytes());
+            out.write(toRESPInt(replicaSockets.size()).getBytes());
           }
         }
       }
