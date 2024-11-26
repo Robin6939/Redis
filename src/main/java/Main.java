@@ -4,8 +4,8 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Vector;
 
@@ -18,6 +18,8 @@ public class Main extends Thread  {
   static String masterHost = "";
   static String replica = "";
   static int port = 0;
+  static HashSet<Socket> replicaSockets = new HashSet<>();
+  static Socket masterSocket;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
@@ -90,6 +92,20 @@ public class Main extends Thread  {
 
   }
 
+  public static void sendToReplica(Vector<String> command) throws IOException {
+    String toSend = "";
+    String arr[] = new String[command.size()];
+    for(int i = 0;i<command.size();i++) {
+      arr[i] = command.get(i);
+    }
+    toSend = encodeRESPArr(arr);
+    for(Socket s:replicaSockets) {
+      OutputStream os = s.getOutputStream();
+      System.out.println("Writing to a replica");
+      os.write(toSend.getBytes());
+    }
+  }
+
 
   public void run() {
     Socket s = getSocket();
@@ -114,9 +130,12 @@ public class Main extends Thread  {
             out.write("+PONG\r\n".getBytes());
           }
           if(command.get(0).equalsIgnoreCase("SET")) {
+            sendToReplica(command);
             System.out.println("It is a SET command");
             map.put(command.get(1), command.get(2));
-            out.write(encodeRESP("OK").getBytes());
+            if(s.equals(masterSocket)==false) {
+              out.write(encodeRESP("OK").getBytes());
+            }
             if(command.size()>3) {
               int ms = Integer.parseInt(command.get(4));
               Thread t = new Thread() {
@@ -155,6 +174,9 @@ public class Main extends Thread  {
             }
           }
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
+            if(command.get(1).equalsIgnoreCase("listening-port")) {
+              replicaSockets.add(s);
+            }
             out.write("+OK\r\n".getBytes());
           }
           if(command.get(0).equalsIgnoreCase("PSYNC")) {
@@ -198,7 +220,7 @@ public class Main extends Thread  {
       System.out.println(args[3]);
       masterHost = args[3].substring(0, args[3].length()-5);
       masterPort = Integer.parseInt(args[3].substring(args[3].length()-4));
-      Socket masterSocket = new Socket(masterHost, masterPort);
+      masterSocket = new Socket(masterHost, masterPort);
       OutputStream outMaster = (masterSocket.getOutputStream());
       InputStream inMaster = masterSocket.getInputStream();
       String[] arr = {"PING"};
@@ -236,12 +258,7 @@ public class Main extends Thread  {
       while(skip-->0) {
         inMaster.read();
       }
-      masterSocket.close();
     }
-
-
-
-
     try {
       System.out.println("checkpoint 1");
       serverSocket = new ServerSocket(port);
@@ -264,5 +281,6 @@ public class Main extends Thread  {
         System.out.println("IOException: " + e.getMessage());
       }
     }
+    masterSocket.close();
   }
 }
