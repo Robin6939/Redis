@@ -21,42 +21,55 @@ public class Main extends Thread  {
   static HashSet<Socket> replicaSockets = new HashSet<>();
   static Socket masterSocket;
   static HashMap<String, String> map = new HashMap<>();
+  static int countBytes = 0;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
+    System.out.println("The last command was: "+command+" and the before count of executed bytes are: "+countBytes);
     int x = 0;
+    countBytes++;
     char ch = (char)in.read();
+    countBytes++;
     while(ch!='\r') {
       int x1 = (int)ch - (int)'0';
       x = x*10 + x1;
       ch = (char)in.read();
+      countBytes++;
     }
     while(x-->0) {
       int skip = 2;
       while(skip-->0) {
         in.read();
+        countBytes++;
       } 
       char ch1 = (char)in.read();
+      countBytes++;
       int y = 0;
       while(ch1!='\r') {
         int y1 = (int)ch1 - (int)'0';
         y = y*10 + y1;
         ch1 = (char)in.read();
+        countBytes++;
       }
       skip = 1;
       while(skip-->0) {
         in.read();
+        countBytes++;
       }
       String s="";
       while(y-->0) {
         s=s+(char)in.read();
+        countBytes++;
       }
       in.read();
+      countBytes++;
       command.addElement(s);
     }
     int skip = 1;
     while(skip-->0) {
       in.read();
+      countBytes++;
     }
+    System.out.println("The last command was: "+command+" and the current count of executed bytes are: "+countBytes);
   }
 
   public static String encodeRESPArr(String[] arr) {
@@ -99,6 +112,7 @@ public class Main extends Thread  {
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
+        int countTemp = countBytes;
         char ch = (char)in.read();
         if(ch=='*') {
           Vector<String> command = new Vector<>();
@@ -111,7 +125,9 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("PING")) {
             System.out.println("It is an PING command");
-            out.write("+PONG\r\n".getBytes());
+            if(s.equals(masterSocket)==false) {
+              out.write("+PONG\r\n".getBytes());
+            }
           }
           if(command.get(0).equalsIgnoreCase("SET")) {
             sendToReplica(command);
@@ -176,7 +192,8 @@ public class Main extends Thread  {
               out.write("+OK\r\n".getBytes());
             }
             else if(command.get(1).equalsIgnoreCase("GETACK")) {
-              String toSend[] = {"REPLCONF", "ACK", "0"};
+              String count = "" + countTemp;
+              String toSend[] = {"REPLCONF", "ACK", count};
               out.write(encodeRESPArr(toSend).getBytes());
             }
           }
@@ -210,11 +227,10 @@ public class Main extends Thread  {
 
   public static void main(String[] args) throws UnknownHostException, IOException{
     System.out.println("Logs from your program will appear here!");
-    
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
     port = args.length==0?6379:Integer.parseInt(args[1]);
-
+    countBytes = 0;
 
     if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave
       master = false;
