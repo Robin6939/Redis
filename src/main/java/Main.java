@@ -23,12 +23,11 @@ public class Main extends Thread  {
   static int countBytes = 0;
   static int receivedACKS = 0;
 
-  public void readCommand(InputStream in, Vector<String> command, Boolean count) throws IOException {
+  public void readCommand(InputStream in, Vector<String> command) throws IOException {
     int x = 0;
     int tempcount = 0;
     tempcount++;
     char ch = (char)in.read();
-    if(count)
     tempcount++;
     while(ch!='\r') {
       int x1 = (int)ch - (int)'0';
@@ -120,11 +119,10 @@ public class Main extends Thread  {
     try (InputStream in = s.getInputStream()) {
       OutputStream out = (s.getOutputStream());
       while(true) {
-        int countTemp = countBytes;
         char ch = (char)in.read();
         if(ch=='*') {
           Vector<String> command = new Vector<>();
-          readCommand(in, command, true);
+          readCommand(in, command);
           System.out.println("Received the following command: " + command);
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
@@ -157,7 +155,7 @@ public class Main extends Thread  {
                       while(true) {
                         os.write(encodeRESPArr(arr).getBytes());
                         Vector<String> receive = new Vector<>();
-                        readCommand(is, receive, false);
+                        readCommand(is, receive);
                         if(Integer.parseInt(receive.get(2))==(countBytes)) {
                           replicaSockets.put(soc, true);
                           System.out.println("Ack received");
@@ -222,14 +220,14 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
             if(command.get(1).equalsIgnoreCase("listening-port")) {
               System.out.println("New replica added to the current master from port: " + s.getPort());
-              replicaSockets.put(s,false);
+              replicaSockets.put(s,countBytes==0?true:false);
               out.write("+OK\r\n".getBytes());
             }
             else if(command.get(1).equalsIgnoreCase("capa")) {
               out.write("+OK\r\n".getBytes());
             }
             else if(command.get(1).equalsIgnoreCase("GETACK")) {
-              String count = "" + countTemp;
+              String count = "" + countBytes;
               String toSend[] = {"REPLCONF", "ACK", count};
               out.write(encodeRESPArr(toSend).getBytes());
             }
