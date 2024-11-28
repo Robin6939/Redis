@@ -5,7 +5,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Vector;
 
@@ -18,58 +17,63 @@ public class Main extends Thread  {
   static String masterHost = "";
   static String replica = "";
   static int port = 0;
-  static HashSet<Socket> replicaSockets = new HashSet<>();
+  static HashMap<Socket, Boolean> replicaSockets = new HashMap<>();
   static Socket masterSocket;
   static HashMap<String, String> map = new HashMap<>();
   static int countBytes = 0;
+  static int receivedACKS = 0;
 
-  public void readCommand(InputStream in, Vector<String> command) throws IOException {
-    System.out.println("The last command was: "+command+" and the before count of executed bytes are: "+countBytes);
+  public void readCommand(InputStream in, Vector<String> command, Boolean count) throws IOException {
     int x = 0;
-    countBytes++;
+    int tempcount = 0;
+    tempcount++;
     char ch = (char)in.read();
-    countBytes++;
+    if(count)
+    tempcount++;
     while(ch!='\r') {
       int x1 = (int)ch - (int)'0';
       x = x*10 + x1;
       ch = (char)in.read();
-      countBytes++;
+      tempcount++;
     }
     while(x-->0) {
       int skip = 2;
       while(skip-->0) {
         in.read();
-        countBytes++;
+        tempcount++;
       } 
       char ch1 = (char)in.read();
-      countBytes++;
+      tempcount++;
       int y = 0;
       while(ch1!='\r') {
         int y1 = (int)ch1 - (int)'0';
         y = y*10 + y1;
         ch1 = (char)in.read();
-        countBytes++;
+        tempcount++;
       }
       skip = 1;
       while(skip-->0) {
         in.read();
-        countBytes++;
+        tempcount++;
       }
       String s="";
       while(y-->0) {
         s=s+(char)in.read();
-        countBytes++;
+        tempcount++;
       }
       in.read();
-      countBytes++;
+      tempcount++;
       command.addElement(s);
     }
     int skip = 1;
     while(skip-->0) {
       in.read();
-      countBytes++;
+      tempcount++;
     }
-    System.out.println("The last command was: "+command+" and the current count of executed bytes are: "+countBytes);
+    if(command.size()>1 && command.get(0).equalsIgnoreCase("SET")) {
+      countBytes = countBytes + tempcount;
+    }
+    System.out.println("The last command was: "+command+" and bytes now are: "+countBytes);
   }
 
   public static String encodeRESPArr(String[] arr) {
@@ -99,7 +103,7 @@ public class Main extends Thread  {
       arr[i] = command.get(i);
     }
     toSend = encodeRESPArr(arr);
-    for(Socket s:replicaSockets) {
+    for(Socket s:replicaSockets.keySet()) {
       OutputStream os = s.getOutputStream();
       System.out.println("Writing to a replica");
       os.write(toSend.getBytes());
@@ -120,7 +124,7 @@ public class Main extends Thread  {
         char ch = (char)in.read();
         if(ch=='*') {
           Vector<String> command = new Vector<>();
-          readCommand(in, command);
+          readCommand(in, command, true);
           System.out.println("Received the following command: " + command);
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
@@ -137,10 +141,39 @@ public class Main extends Thread  {
             sendToReplica(command);
             System.out.println("It is a SET command");
             map.put(command.get(1), command.get(2));
-            if(s.equals(masterSocket)==false) {
+            if(s.equals(masterSocket)==false) {// if request is not coming from the master socket but the client
               out.write(encodeRESP("OK").getBytes());
+              for(Socket soc:replicaSockets.keySet()) {
+                replicaSockets.put(soc, false);
+              }
+              Thread t = new Thread() {
+                public void run() {
+                  for(Socket soc:replicaSockets.keySet()) {
+                    try{
+                      System.out.println("Sent set command to replicas now waiting for acks");
+                      OutputStream os = soc.getOutputStream();
+                      InputStream is = soc.getInputStream();
+                      String arr[] = {"REPLCONF", "GETACK", "*"};
+                      while(true) {
+                        os.write(encodeRESPArr(arr).getBytes());
+                        Vector<String> receive = new Vector<>();
+                        readCommand(is, receive, false);
+                        if(Integer.parseInt(receive.get(2))==(countBytes)) {
+                          replicaSockets.put(soc, true);
+                          System.out.println("Ack received");
+                          break;
+                        }
+                      }
+                    }
+                    catch(IOException e) {
+                      System.out.println(e);
+                    }
+                  }
+                }
+              };
+              t.start();
             }
-            else {
+            else { //if request is coming from the master socket
               System.out.println("Received a command which was propagated by master which is: "+ command);
             }
             if(command.size()>3) {
@@ -188,8 +221,8 @@ public class Main extends Thread  {
           }
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
             if(command.get(1).equalsIgnoreCase("listening-port")) {
-              System.out.println("New replica added to the current master");
-              replicaSockets.add(s);
+              System.out.println("New replica added to the current master from port: " + s.getPort());
+              replicaSockets.put(s,false);
               out.write("+OK\r\n".getBytes());
             }
             else if(command.get(1).equalsIgnoreCase("capa")) {
@@ -210,9 +243,13 @@ public class Main extends Thread  {
             out.write(contents);
           }
           if(command.get(0).equalsIgnoreCase("WAIT")) {
-            int numReplicas = Integer.parseInt(command.get(1));
-            int timeout = Integer.parseInt(command.get(2));
-            out.write(toRESPInt(replicaSockets.size()).getBytes());
+            int count = 0;
+            for(Boolean isTrue: replicaSockets.values()) {
+              if(isTrue) {
+                count ++;
+              }
+            }
+            out.write(toRESPInt(count).getBytes());
           }
         }
       }
@@ -241,7 +278,7 @@ public class Main extends Thread  {
     port = args.length==0?6379:Integer.parseInt(args[1]);
     countBytes = 0;
 
-    if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave
+    if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave and it will do handshake under this if
       master = false;
       System.out.println(args[3]);
       masterHost = args[3].substring(0, args[3].length()-5);
@@ -290,7 +327,6 @@ public class Main extends Thread  {
       t.start();
     }
     try {
-      System.out.println("checkpoint 1");
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
       while(true) {
