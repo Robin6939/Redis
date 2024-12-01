@@ -22,8 +22,10 @@ public class Main extends Thread  {
   static HashMap<String, String> map = new HashMap<>();
   static int countBytes = 0;
   static int receivedACKS = 0;
+  static int countClient = 0;
+  static int countInSyncReplicas = 0;
 
-  public void readCommand(InputStream in, Vector<String> command) throws IOException {
+  public synchronized void readCommand(InputStream in, Vector<String> command) throws IOException {
     System.out.println(currentThread().getName()+ " trying to read commands");
     int x = 0;
     int tempcount = 0;
@@ -109,13 +111,26 @@ public class Main extends Thread  {
     toSend = encodeRESPArr(arr);
     for(Socket s:replicaSockets.keySet()) {
       OutputStream os = s.getOutputStream();
-      System.out.println("Writing to a replica");
+      
       os.write(toSend.getBytes());
     }
+    System.out.println("Wrote to all the replicas");
   }
 
   public static String toRESPInt(int x) {
     return ":+" + x + "\r\n";
+  }
+
+  public static synchronized void increaseInSyncReplicas() {
+    countInSyncReplicas++;
+  }
+
+  public static synchronized void decreaseInSyncReplicas() {
+    countInSyncReplicas--;
+  }
+
+  public static synchronized int getCountInSyncReplicas() {
+    return countInSyncReplicas;
   }
 
 
@@ -128,7 +143,7 @@ public class Main extends Thread  {
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
-          System.out.println("Received the following command: " + command + "from socket: " + currentThread().getName());
+          System.out.println("Received the following command: " + command + " from socket: " + currentThread().getName());
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
             String send = encodeRESP(command.get(1));
@@ -148,39 +163,13 @@ public class Main extends Thread  {
               out.write(encodeRESP("OK").getBytes());
               for(Socket soc:replicaSockets.keySet()) {
                 replicaSockets.put(soc, false);
+                decreaseInSyncReplicas();
               }
-              Thread t = new Thread() {
-                public void run() {
-                  for(Socket soc:replicaSockets.keySet()) {
-                    try{
-                      OutputStream os = soc.getOutputStream();
-                      InputStream is = soc.getInputStream();
-                      String arr[] = {"REPLCONF", "GETACK", "*"};
-                      while(true) {
-                        os.write(encodeRESPArr(arr).getBytes());
-                        System.out.println("sent replconf command to replicas");
-                        Vector<String> receive = new Vector<>();
-                        readCommand(is, receive);
-                        System.out.println("This is what replica sends: "+receive);
-                        if(receive.size()>2 && Integer.parseInt(receive.get(2))==(countBytes)) {
-                          replicaSockets.put(soc, true);
-                          System.out.println("Ack received");
-                          break;
-                        }
-                      }
-                    }
-                    catch(IOException e) {
-                      System.out.println(e);
-                    }
-                  }
-                }
-              };
-              t.start();
-              try {
-                t.join();
-              } catch (InterruptedException e) {
-                e.printStackTrace();
-              }
+              Vector<String> arr = new Vector<>();
+              arr.add("REPLCONF");
+              arr.add("GETACK");
+              arr.add("*");
+              sendToReplica(arr);
             }
             else { //if request is coming from the master socket
               System.out.println("Received a command which was propagated by master which is: "+ command);
@@ -231,7 +220,14 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("REPLCONF")) {
             if(command.get(1).equalsIgnoreCase("listening-port")) {
               System.out.println("New replica added to the current master from port: " + s.getPort());
-              replicaSockets.put(s,countBytes==0?true:false);
+              if(countBytes==0) {
+                replicaSockets.put(s,true);
+                increaseInSyncReplicas();
+              }
+              else {
+                replicaSockets.put(s,false);
+                decreaseInSyncReplicas();
+              }
               out.write("+OK\r\n".getBytes());
             }
             else if(command.get(1).equalsIgnoreCase("capa")) {
@@ -243,6 +239,15 @@ public class Main extends Thread  {
               System.out.println("Sending this to master: "+encodeRESPArr(toSend));
               out.write(encodeRESPArr(toSend).getBytes());
             }
+            else if(command.get(1).equalsIgnoreCase("ACK")) {
+              System.out.println("This is what replica sent as an ACK: "+command.toString());
+              if(command.size()>2 && Integer.parseInt(command.get(2))==(countBytes)) {
+                replicaSockets.put(s, true);
+                increaseInSyncReplicas();
+                System.out.println("Ack received which is true and in sync replicas now are: "+countInSyncReplicas);
+                break;
+              }
+            }
           }
           if(command.get(0).equalsIgnoreCase("PSYNC")) {
             String toSend = "+FULLRESYNC " + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" + " 0\r\n";
@@ -253,13 +258,15 @@ public class Main extends Thread  {
             out.write(contents);
           }
           if(command.get(0).equalsIgnoreCase("WAIT")) {
-            int count = 0;
-            for(Boolean isTrue: replicaSockets.values()) {
-              if(isTrue) {
-                count ++;
-              }
+            System.out.println("This is the WAIT command");
+            int timeout = Integer.parseInt(command.get(1));
+            try {
+              Thread.sleep(timeout);
+            } catch (InterruptedException e) {
+              e.printStackTrace();
             }
-            out.write(toRESPInt(count).getBytes());
+            System.out.println("Sending this "+getCountInSyncReplicas());
+            out.write(toRESPInt(getCountInSyncReplicas()).getBytes());
           }
         }
       }
@@ -336,6 +343,12 @@ public class Main extends Thread  {
       addSocket(masterSocket);
       Main t = new Main();
       t.start();
+      System.out.println("------------------------------------------");
+      try {
+        t.join();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
     }
     try {
       serverSocket = new ServerSocket(port);
@@ -345,6 +358,9 @@ public class Main extends Thread  {
         System.out.println("Connection established");
         addSocket(clientSocket);
         Main t = new Main();
+        countClient++;
+        String name = "Client" + countClient;
+        t.setName(name);
         t.start();
       }
     } catch (IOException e) {
