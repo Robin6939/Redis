@@ -11,7 +11,7 @@ import java.util.Vector;
 public class Main extends Thread  {
 
   static Vector<Socket> v = new Vector<>();
-  static int size = 0;
+  // static int size = 0;
   static Boolean master = true;
   static int masterPort = -1;
   static String masterHost = "";
@@ -24,6 +24,7 @@ public class Main extends Thread  {
   static int receivedACKS = 0;
 
   public void readCommand(InputStream in, Vector<String> command) throws IOException {
+    System.out.println(currentThread().getName()+ " trying to read commands");
     int x = 0;
     int tempcount = 0;
     tempcount++;
@@ -70,9 +71,13 @@ public class Main extends Thread  {
       tempcount++;
     }
     if(command.size()>1 && command.get(0).equalsIgnoreCase("SET")) {
-      countBytes = countBytes + tempcount;
+      addToCountBytes(tempcount);
     }
-    System.out.println("The last command was: "+command+" and bytes now are: "+countBytes);
+    System.out.println("The last command was: "+command);
+  }
+
+  public static synchronized void addToCountBytes(int addValue) {
+    countBytes += addValue;
   }
 
   public static String encodeRESPArr(String[] arr) {
@@ -123,7 +128,7 @@ public class Main extends Thread  {
         if(ch=='*') {
           Vector<String> command = new Vector<>();
           readCommand(in, command);
-          System.out.println("Received the following command: " + command);
+          System.out.println("Received the following command: " + command + "from socket: " + currentThread().getName());
           if(command.get(0).equalsIgnoreCase("ECHO")) {
             System.out.println("It is an ECHO command");
             String send = encodeRESP(command.get(1));
@@ -148,15 +153,16 @@ public class Main extends Thread  {
                 public void run() {
                   for(Socket soc:replicaSockets.keySet()) {
                     try{
-                      System.out.println("Sent set command to replicas now waiting for acks");
                       OutputStream os = soc.getOutputStream();
                       InputStream is = soc.getInputStream();
                       String arr[] = {"REPLCONF", "GETACK", "*"};
                       while(true) {
                         os.write(encodeRESPArr(arr).getBytes());
+                        System.out.println("sent replconf command to replicas");
                         Vector<String> receive = new Vector<>();
                         readCommand(is, receive);
-                        if(Integer.parseInt(receive.get(2))==(countBytes)) {
+                        System.out.println("This is what replica sends: "+receive);
+                        if(receive.size()>2 && Integer.parseInt(receive.get(2))==(countBytes)) {
                           replicaSockets.put(soc, true);
                           System.out.println("Ack received");
                           break;
@@ -170,6 +176,11 @@ public class Main extends Thread  {
                 }
               };
               t.start();
+              try {
+                t.join();
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
             }
             else { //if request is coming from the master socket
               System.out.println("Received a command which was propagated by master which is: "+ command);
@@ -229,6 +240,7 @@ public class Main extends Thread  {
             else if(command.get(1).equalsIgnoreCase("GETACK")) {
               String count = "" + countBytes;
               String toSend[] = {"REPLCONF", "ACK", count};
+              System.out.println("Sending this to master: "+encodeRESPArr(toSend));
               out.write(encodeRESPArr(toSend).getBytes());
             }
           }
@@ -258,13 +270,14 @@ public class Main extends Thread  {
 
   public synchronized static void addSocket(Socket cs) {
     v.addElement(cs);
-    size++;
+    // size++;
   }
 
   public synchronized static Socket getSocket() {
-    Socket cs = v.lastElement();
-    v.remove(size-1);
-    size--;
+    while(v.isEmpty());
+    Socket cs = v.get(v.size()-1);
+    v.remove(v.size()-1);
+    // size--;
     return cs;
   }
 
