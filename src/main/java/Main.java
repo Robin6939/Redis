@@ -261,7 +261,7 @@ public class Main extends Thread  {
             System.out.println("This is the WAIT command");
             int timeout = Integer.parseInt(command.get(1));
             try {
-              Thread.sleep(timeout);
+              Thread.sleep(timeout+500);
             } catch (InterruptedException e) {
               e.printStackTrace();
             }
