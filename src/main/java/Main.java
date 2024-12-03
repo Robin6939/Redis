@@ -1,3 +1,4 @@
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -8,6 +9,8 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Main extends Thread  {
 
@@ -35,6 +38,8 @@ public class Main extends Thread  {
   static int receivedACKS = 0;
   static int countClient = 0;
   static int countInSyncReplicas = 0;
+  static Vector<String> getAckCommand = new Vector<>();
+  
 
   public synchronized void readCommand(InputStream in, Vector<String> command) throws IOException {
     //System.out.println(currentThread().getName()+ " trying to read commands");
@@ -117,13 +122,43 @@ public class Main extends Thread  {
     return "$"+n+"\r\n"+s;
   }
 
+  private static void sendToSocket(Socket s, String toSend) throws IOException {
+    OutputStream os = new BufferedOutputStream(s.getOutputStream());
+    os.write(toSend.getBytes());
+    os.flush();  // Ensure data is sent immediately
+  }
+
   public static synchronized void sendToReplica(Vector<String> command) throws IOException {
-    String toSend = "";
+    String toSend1 = "";
     String arr[] = new String[command.size()];
     for(int i = 0;i<command.size();i++) {
       arr[i] = command.get(i);
     }
-    toSend = encodeRESPArr(arr);
+    toSend1 = encodeRESPArr(arr);
+    final String toSend = toSend1;
+    
+    
+    for(Socket s:replicaSockets.keySet()) {
+      OutputStream os = s.getOutputStream();
+      os.write(toSend.getBytes()); 
+      os.flush();
+    }
+    // ExecutorService executor = Executors.newFixedThreadPool(Math.min(replicaSockets.size(), 10)); // Adjust pool size as needed
+    // Sending data to each replica using parallel threads
+    // for (Socket s : replicaSockets.keySet()) {
+    //     executor.submit(() -> {
+    //         try {
+    //             sendToSocket(s, toSend);
+    //         } catch (IOException e) {
+    //             System.err.println("Error sending data to replica: " + s + " Error: " + e.getMessage());
+    //         }
+    //     });
+    // }
+    // Shut down the executor service
+    // executor.shutdown();  
+
+
+
     if(arr[0].equalsIgnoreCase("SET") == false) {
       int tempadd = 0;
       for(int i = 0;i<toSend.length();i++) {
@@ -133,21 +168,8 @@ public class Main extends Thread  {
         else
           tempadd++;
       }
-      //System.out.println(ANSI_BLUE_BACKGROUND+"This is replconf command which increases countbytes by: "+tempadd+" and to: "+countBytes);
       addToCountBytes(tempadd);
     }
-    
-    for(Socket s:replicaSockets.keySet()) {
-      //System.out.println(s.getPort());
-      try{
-        OutputStream os = s.getOutputStream();
-        os.write(toSend.getBytes());
-      }
-      catch(IOException|SecurityException e) {
-        //System.out.println(e);
-      }  
-    }
-    //System.out.println("Wrote to all the replicas");
   }
 
   public static String toRESPInt(int x) {
@@ -181,12 +203,14 @@ public class Main extends Thread  {
             //System.out.println("It is an ECHO command");
             String send = encodeRESP(command.get(1));
             out.write(send.getBytes());
+            out.flush();
           }
           if(command.get(0).equalsIgnoreCase("PING")) {
             //System.out.println("It is an PING command");
             // sendToReplica(command);
             if(s.equals(masterSocket)==false) {
               out.write("+PONG\r\n".getBytes());
+              out.flush();
             }
           }
           if(command.get(0).equalsIgnoreCase("SET")) {
@@ -196,16 +220,19 @@ public class Main extends Thread  {
             map.put(command.get(1), command.get(2));
             if(s.equals(masterSocket)==false) {// if request is not coming from the master socket but the client
               out.write(encodeRESP("OK").getBytes());
+              out.flush();
               countInSyncReplicas = 0;
               for(Socket soc:replicaSockets.keySet()) {
                 replicaSockets.put(soc, false);
                 // decreaseInSyncReplicas();
               }
-              Vector<String> arr = new Vector<>();
-              arr.add("REPLCONF");
-              arr.add("GETACK");
-              arr.add("*");
-              sendToReplica(arr);
+              
+              sendToReplica(getAckCommand);
+              // try {
+              //   Thread.sleep(100);
+              // } catch (InterruptedException e) {
+              //   e.printStackTrace();
+              // }
             }
             else { //if request is coming from the master socket
               //System.out.println("Received a command which was propagated by master which is: "+ command);
@@ -233,10 +260,12 @@ public class Main extends Thread  {
             if(send==null || send.length()==0) {
               //System.out.println("Didn't find in the current map");
               out.write("$-1\r\n".getBytes());
+              out.flush();
             }
             else {
               //System.out.println("Sending the following: "+send);
               out.write(encodeRESP(send).getBytes());
+              out.flush();
             }
           }
           if(command.get(0).equalsIgnoreCase("INFO")) {
@@ -245,11 +274,13 @@ public class Main extends Thread  {
                 String send = "role:master\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\nmaster_repl_offset:0";
                 String toSend = encodeRESP(send);
                 out.write(toSend.getBytes());
+                out.flush();
               }
               else {
                 String send = "role:slave\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\nmaster_repl_offset:0";
                 String toSend = encodeRESP(send);
                 out.write(toSend.getBytes());
+                out.flush();
               }
             }
           }
@@ -265,15 +296,18 @@ public class Main extends Thread  {
                 decreaseInSyncReplicas();
               }
               out.write("+OK\r\n".getBytes());
+              out.flush();
             }
             else if(command.get(1).equalsIgnoreCase("capa")) {
               out.write("+OK\r\n".getBytes());
+              out.flush();
             }
             else if(command.get(1).equalsIgnoreCase("GETACK")) {
               String count = "" + countBytes;
               String toSend[] = {"REPLCONF", "ACK", count};
               //System.out.println("Sending this to master: "+encodeRESPArr(toSend));
               out.write(encodeRESPArr(toSend).getBytes());
+              out.flush();
             }
             else if(command.get(1).equalsIgnoreCase("ACK")) {
               //System.out.println("This is what replica sent as an ACK: "+command.toString());
@@ -288,10 +322,13 @@ public class Main extends Thread  {
           if(command.get(0).equalsIgnoreCase("PSYNC")) {
             String toSend = "+FULLRESYNC " + "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" + " 0\r\n";
             out.write(toSend.getBytes());
+            out.flush();
             byte[] contents = HexFormat.of().parseHex(
                 "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2");
             out.write(("$"+contents.length+"\r\n").getBytes());
+            out.flush();
             out.write(contents);
+            out.flush();
           }
           if(command.get(0).equalsIgnoreCase("WAIT")) {
             //System.out.println("This is the WAIT command");
@@ -303,6 +340,7 @@ public class Main extends Thread  {
             }
             String toSend = toRESPInt(getCountInSyncReplicas());
             out.write(toSend.getBytes());
+            out.flush();
           }
         }
       }
@@ -329,6 +367,9 @@ public class Main extends Thread  {
     Socket clientSocket = null;
     port = args.length==0?6379:Integer.parseInt(args[1]);
     countBytes = 0;
+    getAckCommand.add("REPLCONF");
+    getAckCommand.add("GETACK");
+    getAckCommand.add("*");
 
     if(args.length>2 && args[2].equals("--replicaof")) { //this one is a slave and it will do handshake under this if
       master = false;
@@ -341,24 +382,28 @@ public class Main extends Thread  {
       String[] arr = {"PING"};
       //System.out.println(encodeRESPArr(arr));
       outMaster.write(encodeRESPArr(arr).getBytes());
+      outMaster.flush();
       int skip = 7;
       while(skip-->0) { //skip ok response
         inMaster.read();
       }
       String[] repl1 = {"REPLCONF", "listening-port", port+""};
       outMaster.write(encodeRESPArr(repl1).getBytes());
+      outMaster.flush();
       skip = 5;
       while(skip-->0) { //skip ok response
         inMaster.read();
       }
       String[] repl2 = {"REPLCONF", "capa", "psync2"};
       outMaster.write(encodeRESPArr(repl2).getBytes());
+      outMaster.flush();
       skip = 5;
       while(skip-->0) { //skip ok response
         inMaster.read();
       }
       String[] psync = {"PSYNC", "?", "-1"};
       outMaster.write(encodeRESPArr(psync).getBytes());
+      outMaster.flush();
       skip=12;
       while(skip-->0){
         inMaster.read();
