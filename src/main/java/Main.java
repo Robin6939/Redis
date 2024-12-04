@@ -279,6 +279,8 @@ public class Main {
                     case "WAIT":
                         handleWaitCommand(command, os);
                         break;
+                    case "TYPE":
+                        handleTypeCommand(command, os);
                     default:
                         break;
                 }
@@ -422,5 +424,14 @@ public class Main {
                 isSent.set(true);
             }
         }
+    }
+
+    public static void handleTypeCommand(Vector<String> command, OutputStream os) throws IOException {
+        String key = command.get(1);
+        System.out.println(key);
+        if(dataStore.getOrDefault(key, null)!=null)
+            os.write("+string\r\n".getBytes());
+        else
+            os.write("+none\r\n".getBytes());
     }
 }
