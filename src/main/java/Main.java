@@ -4,6 +4,7 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Vector;
@@ -12,6 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Main {
 
@@ -24,8 +26,9 @@ public class Main {
     static ConcurrentHashMap<String, String> dataStore = new ConcurrentHashMap<>();
     static ConcurrentHashMap<Socket, Boolean> replicaSockets = new ConcurrentHashMap<>();
     static AtomicInteger inSyncReplicaCount = new AtomicInteger(0);
-    static ConcurrentHashMap<String, Vector<String>> streamStore = new ConcurrentHashMap<>();
-
+    static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();
+    static ConcurrentHashMap<Long, Long> streadIds = new ConcurrentHashMap<>();
+    static AtomicLong lastTimeId = new AtomicLong(-1);
 
 
 
@@ -443,12 +446,39 @@ public class Main {
 
     public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
         String key = command.get(1);
-        Vector<String> values = new Vector<>();
-        for(int i=3;i<command.size();i++) {
-            values.add(command.get(i));
+        String[] id = command.get(2).split("-");
+        if(streamStore.contains(key)) {
+            for(int i=3;i<command.size();i+=2) {
+                streamStore.get(key).put(command.get(i), command.get(i+1));
+            }
         }
+        else {
+            ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
+            for(int i=3;i<command.size();i+=2) {
+                values.put(command.get(i), command.get(i+1));
+            }
+            streamStore.put(key, values);
+        }
+         
+        
         String toReturn = command.get(2);
-        os.write(("+"+toReturn+"\r\n").getBytes());
-        streamStore.put(key, values);
+        long timeId = Long.parseLong(id[0]);
+        long seqId = Long.parseLong(id[1]);
+
+
+        if(toReturn.equals("0-0")) {
+            os.write("-ERR The ID specified in XADD must be greater than 0-0\r\n".getBytes());
+        }
+        else if(timeId > lastTimeId.get()) {
+            os.write(("+"+toReturn+"\r\n").getBytes()); 
+            lastTimeId.set(timeId);
+        }
+        else if(timeId == lastTimeId.get() && (streadIds.containsKey(timeId)==false || streadIds.get(timeId)<seqId)) {
+            os.write(("+"+toReturn+"\r\n").getBytes());
+            streadIds.put(timeId, seqId);
+        }
+        else {
+            os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
+        }
     }   
 }
