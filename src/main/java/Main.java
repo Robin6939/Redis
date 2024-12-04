@@ -435,6 +435,8 @@ public class Main {
         System.out.println(key);
         if(dataStore.getOrDefault(key, null)!=null)
             os.write("+string\r\n".getBytes());
+        else if(streamStore.getOrDefault(key, null)!=null)
+            os.write("+stream\r\n".getBytes());
         else
             os.write("+none\r\n".getBytes());
     }
