@@ -10,6 +10,7 @@ import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
@@ -55,14 +56,17 @@ public class Main {
 
     public static void send(String[] command, OutputStream os) throws IOException {
         os.write(encodeRESPArr(command).getBytes());
+        os.flush();
     }
 
     public static void send(int integer, OutputStream os) throws IOException {
         os.write(toRESPInt(integer).getBytes());
+        os.flush();
     }
 
     public static void send(String word, OutputStream os) throws IOException {
         os.write(encodeRESP(word).getBytes());
+        os.flush();
     }
 
     public static void sendToReplicas(Vector<String> command) throws IOException {
@@ -352,6 +356,7 @@ public class Main {
           }
           else if(command.get(1).equalsIgnoreCase("ACK")) {
             if(command.size()>2 && Integer.parseInt(command.get(2))==(countBytes.get()-37)) {
+              System.out.println("Received ack");
               replicaSockets.put(s, true);
               inSyncReplicaCount.incrementAndGet();
             }
@@ -359,12 +364,27 @@ public class Main {
     }
 
     public static void handleWaitCommand(Vector<String> command, OutputStream os) throws IOException {
+        System.out.println("This is a wait command: "+command.toString());
+        System.out.println(inSyncReplicaCount.get());
         int timeout = Integer.parseInt(command.get(1));
+        int rep = Integer.parseInt(command.get(2));
+        AtomicBoolean isSent = new AtomicBoolean(false);
         try {
             Thread.sleep(timeout);
+            if(isSent.get()==false){
+                send(inSyncReplicaCount.get(), os);
+                System.out.println("Send wait reply after timeout");
+                isSent.set(true);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        send(inSyncReplicaCount.get(), os);
+        while(isSent.get()==false) {
+            if(inSyncReplicaCount.get()>=rep) {
+                send(inSyncReplicaCount.get(), os);
+                System.out.println("Send wait reply before timeout");
+                isSent.set(true);
+            }
+        }
     }
 }
