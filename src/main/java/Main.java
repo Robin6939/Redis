@@ -446,7 +446,7 @@ public class Main {
 
     public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
         String key = command.get(1);
-        String[] id = command.get(2).split("-");
+        
         if(streamStore.contains(key)) {
             for(int i=3;i<command.size();i+=2) {
                 streamStore.get(key).put(command.get(i), command.get(i+1));
@@ -460,25 +460,48 @@ public class Main {
             streamStore.put(key, values);
         }
          
-        
-        String toReturn = command.get(2);
-        long timeId = Long.parseLong(id[0]);
-        long seqId = Long.parseLong(id[1]);
-
-
-        if(toReturn.equals("0-0")) {
-            os.write("-ERR The ID specified in XADD must be greater than 0-0\r\n".getBytes());
-        }
-        else if(timeId > lastTimeId.get()) {
-            os.write(("+"+toReturn+"\r\n").getBytes()); 
-            lastTimeId.set(timeId);
-        }
-        else if(timeId == lastTimeId.get() && (streadIds.containsKey(timeId)==false || streadIds.get(timeId)<seqId)) {
-            os.write(("+"+toReturn+"\r\n").getBytes());
-            streadIds.put(timeId, seqId);
+        if(command.get(2).equals("*")) {
+            long currentTimeMillis = System.currentTimeMillis();
+            String toReturn = currentTimeMillis+"-0";
+            send(toReturn, os);
+            streadIds.put(currentTimeMillis, (long)0);
         }
         else {
-            os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
+            String[] id = command.get(2).split("-");
+            long timeId = Long.parseLong(id[0]);
+            long seqId;
+            if(id[1].equals("*")) {
+                if(streadIds.containsKey(timeId)) {
+                    seqId = streadIds.get(timeId) + 1;
+                }   
+                else {
+                    if(timeId!=0)
+                        seqId = 0;
+                    else
+                        seqId = 1;
+                }
+                streadIds.put(timeId, seqId);
+                System.out.println("Sequence Id set to: "+seqId);
+                String toReturn = timeId+"-"+seqId;
+                os.write(("+"+toReturn+"\r\n").getBytes());
+            } else {
+                seqId = Long.parseLong(id[1]);
+                String toReturn = command.get(2);
+                if(toReturn.equals("0-0")) {
+                    os.write("-ERR The ID specified in XADD must be greater than 0-0\r\n".getBytes());
+                }
+                else if(timeId > lastTimeId.get()) {
+                    os.write(("+"+toReturn+"\r\n").getBytes()); 
+                    lastTimeId.set(timeId);
+                }
+                else if(timeId == lastTimeId.get() && (streadIds.containsKey(timeId)==false || streadIds.get(timeId)<seqId)) {
+                    os.write(("+"+toReturn+"\r\n").getBytes());
+                    streadIds.put(timeId, seqId);
+                }
+                else {
+                    os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
+                }
+            }
         }
     }   
 }
