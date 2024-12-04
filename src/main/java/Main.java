@@ -139,13 +139,10 @@ public class Main {
             in.read();
             tempcount++;
         }
-        System.out.println("Command received: "+command);
         if(command.size()>0) {
             if(command.get(0).equalsIgnoreCase("SET") ||
              (command.size()>1 && command.get(1).equalsIgnoreCase("GETACK")) ) {
-                System.out.println("Incrementing the countBytes because of set or replconf command by: "+tempcount);
                 countBytes.addAndGet(tempcount);
-                System.out.println("Value of countBytes is: "+countBytes.get());        
             }
         }
     }
@@ -174,13 +171,11 @@ public class Main {
         String masterHost = args[3].substring(0, args[3].length()-5);
         int masterPort = Integer.parseInt(args[3].substring(args[3].length()-4));
         masterSocket = new Socket(masterHost, masterPort);
-        System.out.println("connected with master and the replica is on port: "+port);
         threadPool.submit(() -> {
             try {
                 handleHandshake();
                 handleClients(masterSocket);
             } catch (IOException | InterruptedException e) {
-                System.out.println("Some error occured in line 182");
                 e.printStackTrace();
             }
         });
@@ -192,7 +187,6 @@ public class Main {
                     try {
                         handleClients(socket);
                     } catch (IOException | InterruptedException e) {
-                        System.out.println("Some error at line 225");
                         e.printStackTrace();
                     }
                 });
@@ -202,7 +196,6 @@ public class Main {
 
     public static void handleHandshake() throws IOException {
 
-        System.out.println("Handshake started");
         InputStream is = masterSocket.getInputStream();
         OutputStream os = masterSocket.getOutputStream();
 
@@ -226,7 +219,6 @@ public class Main {
             replicationId = replicationId+ch;
         }
         skip(is, 4);
-        System.out.println("Handshake over");
     }
 
     public static void setupMaster(String[] args) throws IOException {
@@ -240,7 +232,6 @@ public class Main {
                     try {
                         handleClients(socket);
                     } catch (IOException | InterruptedException e) {
-                        System.out.println("Some error at line 225");
                         e.printStackTrace();
                     }
                 });
@@ -307,16 +298,6 @@ public class Main {
 
     public static void handleGetCommand(Vector<String> command, OutputStream os) throws IOException, InterruptedException {
         String key = command.get(1);
-        // if(key=="foo")
-        //     send("123", os);
-        // else {
-        //     String value = dataStore.getOrDefault(key, null);
-        //     if(value!=null)
-        //         send(value, os);
-        //     else   
-        //         send("123", os);
-        // }
-
 
         AtomicBoolean isSent = new AtomicBoolean(false);
         int timeout = 10;
@@ -325,7 +306,6 @@ public class Main {
                 Thread.sleep(timeout);
                 if(isSent.get()==false){
                     os.write("$-1\r\n".getBytes());
-                    System.out.println("Sent response after timeout");
                     isSent.set(true);
                 }
             } catch (InterruptedException | IOException e) {
@@ -335,7 +315,6 @@ public class Main {
         while(isSent.get()==false) {
             if(dataStore.getOrDefault(key, null)!=null) {
                 send(dataStore.getOrDefault(key, null), os);
-                System.out.println("Sent response before timeout");
                 isSent.set(true);
             }
         }
@@ -416,7 +395,6 @@ public class Main {
           }
           else if(command.get(1).equalsIgnoreCase("ACK")) {
             if(command.size()>2 && Integer.parseInt(command.get(2))==(countBytes.get()-37)) {
-              System.out.println("Received ack");
               replicaSockets.put(s, true);
               inSyncReplicaCount.incrementAndGet();
             }
@@ -424,7 +402,6 @@ public class Main {
     }
 
     public static void handleWaitCommand(Vector<String> command, OutputStream os) throws IOException {
-        System.out.println("This is a wait command: "+command.toString());
         int timeout = Integer.parseInt(command.get(2));
         int rep = Integer.parseInt(command.get(1));
         AtomicBoolean isSent = new AtomicBoolean(false);
@@ -433,18 +410,15 @@ public class Main {
                 Thread.sleep(timeout);
                 if(isSent.get()==false){
                     send(inSyncReplicaCount.get(), os);
-                    System.out.println("Sent response after timeout");
                     isSent.set(true);
                 }
             } catch (InterruptedException | IOException e) {
-                System.out.println("Some error at line 225");
                 Thread.currentThread().interrupt();
             }
         });
         while(isSent.get()==false) {
             if(inSyncReplicaCount.get()>=rep) {
                 send(inSyncReplicaCount.get(), os);
-                System.out.println("Sent response before timeout");
                 isSent.set(true);
             }
         }
