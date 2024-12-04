@@ -139,9 +139,13 @@ public class Main {
             in.read();
             tempcount++;
         }
-        if(command.size()>1) {
-            if(command.get(0).equalsIgnoreCase("SET")) {
-                countBytes.addAndGet(tempcount);            
+        System.out.println("Command received: "+command);
+        if(command.size()>0) {
+            if(command.get(0).equalsIgnoreCase("SET") ||
+             (command.size()>1 && command.get(1).equalsIgnoreCase("GETACK")) ) {
+                System.out.println("Incrementing the countBytes because of set or replconf command by: "+tempcount);
+                countBytes.addAndGet(tempcount);
+                System.out.println("Value of countBytes is: "+countBytes.get());        
             }
         }
     }
@@ -170,17 +174,35 @@ public class Main {
         String masterHost = args[3].substring(0, args[3].length()-5);
         int masterPort = Integer.parseInt(args[3].substring(args[3].length()-4));
         masterSocket = new Socket(masterHost, masterPort);
-        handleHandshake();
+        System.out.println("connected with master and the replica is on port: "+port);
         threadPool.submit(() -> {
             try {
+                handleHandshake();
                 handleClients(masterSocket);
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
+                System.out.println("Some error occured in line 182");
                 e.printStackTrace();
             }
         });
+        try(ServerSocket serverSocket = new ServerSocket(port)) {
+            serverSocket.setReuseAddress(true);
+            while(true) {
+                Socket socket = serverSocket.accept();
+                threadPool.submit(()->{
+                    try {
+                        handleClients(socket);
+                    } catch (IOException | InterruptedException e) {
+                        System.out.println("Some error at line 225");
+                        e.printStackTrace();
+                    }
+                });
+            }
+        }
     }
 
     public static void handleHandshake() throws IOException {
+
+        System.out.println("Handshake started");
         InputStream is = masterSocket.getInputStream();
         OutputStream os = masterSocket.getOutputStream();
 
@@ -204,6 +226,7 @@ public class Main {
             replicationId = replicationId+ch;
         }
         skip(is, 4);
+        System.out.println("Handshake over");
     }
 
     public static void setupMaster(String[] args) throws IOException {
@@ -216,7 +239,8 @@ public class Main {
                 threadPool.submit(()->{
                     try {
                         handleClients(socket);
-                    } catch (IOException e) {
+                    } catch (IOException | InterruptedException e) {
+                        System.out.println("Some error at line 225");
                         e.printStackTrace();
                     }
                 });
@@ -228,7 +252,7 @@ public class Main {
 
     }
 
-    public static void handleClients(Socket socket) throws IOException {
+    public static void handleClients(Socket socket) throws IOException, InterruptedException {
         InputStream is = socket.getInputStream();
         OutputStream os = socket.getOutputStream();
         while(true) {
@@ -241,8 +265,10 @@ public class Main {
                         handleEchoCommand(command, os);
                         break;
                     case "PING":
-                        if(socket.equals(masterSocket)==false)
+                        if(socket.equals(masterSocket)==false) //coming from client
                             handlePingCommand(command, os);
+                        else
+                            countBytes.addAndGet(14);
                         break;
                     case "SET":
                         handleSetCommand(socket, command, os);
@@ -271,7 +297,7 @@ public class Main {
 
     // Command Handlers
     public static void handleEchoCommand(Vector<String> command, OutputStream os) throws IOException {
-        String response = encodeRESP(command.get(1));
+        String response = (command.get(1));
         send(response, os);
     }
 
@@ -279,14 +305,41 @@ public class Main {
         send("PONG", os);
     }
 
-    public static void handleGetCommand(Vector<String> command, OutputStream os) throws IOException {
+    public static void handleGetCommand(Vector<String> command, OutputStream os) throws IOException, InterruptedException {
         String key = command.get(1);
-        String value = dataStore.getOrDefault(key, null);
-        if (value == null) {
-            send(-1, os);
-        } else {
-            send(value, os);
+        // if(key=="foo")
+        //     send("123", os);
+        // else {
+        //     String value = dataStore.getOrDefault(key, null);
+        //     if(value!=null)
+        //         send(value, os);
+        //     else   
+        //         send("123", os);
+        // }
+
+
+        AtomicBoolean isSent = new AtomicBoolean(false);
+        int timeout = 10;
+        threadPool.submit(() -> {
+            try {
+                Thread.sleep(timeout);
+                if(isSent.get()==false){
+                    os.write("$-1\r\n".getBytes());
+                    System.out.println("Sent response after timeout");
+                    isSent.set(true);
+                }
+            } catch (InterruptedException | IOException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        while(isSent.get()==false) {
+            if(dataStore.getOrDefault(key, null)!=null) {
+                send(dataStore.getOrDefault(key, null), os);
+                System.out.println("Sent response before timeout");
+                isSent.set(true);
+            }
         }
+
     }
 
     public static void handleInfoCommand(Vector<String> command, OutputStream os) throws IOException {
@@ -316,7 +369,14 @@ public class Main {
               replicaSockets.put(soc, false);
             }
             Vector<String> getAckCommand = new Vector<>(Arrays.asList("REPLCONF", "GETACK", "*"));
-            sendToReplicas(getAckCommand);
+            threadPool.submit(() ->{
+                try {
+                    Thread.sleep(100);
+                    sendToReplicas(getAckCommand);
+                } catch (InterruptedException | IOException e) {
+                    e.printStackTrace();
+                }
+            });
           }
           if(command.size()>3) {
             int ms = Integer.parseInt(command.get(4));
@@ -350,7 +410,7 @@ public class Main {
             send("OK", os);
           }
           else if(command.get(1).equalsIgnoreCase("GETACK")) {
-            String count = "" + countBytes.get();
+            String count = "" + (countBytes.get()-37);
             String toSend[] = {"REPLCONF", "ACK", count};
             send(toSend, os);
           }
@@ -365,24 +425,26 @@ public class Main {
 
     public static void handleWaitCommand(Vector<String> command, OutputStream os) throws IOException {
         System.out.println("This is a wait command: "+command.toString());
-        System.out.println(inSyncReplicaCount.get());
-        int timeout = Integer.parseInt(command.get(1));
-        int rep = Integer.parseInt(command.get(2));
+        int timeout = Integer.parseInt(command.get(2));
+        int rep = Integer.parseInt(command.get(1));
         AtomicBoolean isSent = new AtomicBoolean(false);
-        try {
-            Thread.sleep(timeout);
-            if(isSent.get()==false){
-                send(inSyncReplicaCount.get(), os);
-                System.out.println("Send wait reply after timeout");
-                isSent.set(true);
+        threadPool.submit(() -> {
+            try {
+                Thread.sleep(timeout);
+                if(isSent.get()==false){
+                    send(inSyncReplicaCount.get(), os);
+                    System.out.println("Sent response after timeout");
+                    isSent.set(true);
+                }
+            } catch (InterruptedException | IOException e) {
+                System.out.println("Some error at line 225");
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        });
         while(isSent.get()==false) {
             if(inSyncReplicaCount.get()>=rep) {
                 send(inSyncReplicaCount.get(), os);
-                System.out.println("Send wait reply before timeout");
+                System.out.println("Sent response before timeout");
                 isSent.set(true);
             }
         }
