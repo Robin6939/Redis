@@ -24,6 +24,7 @@ public class Main {
     static ConcurrentHashMap<String, String> dataStore = new ConcurrentHashMap<>();
     static ConcurrentHashMap<Socket, Boolean> replicaSockets = new ConcurrentHashMap<>();
     static AtomicInteger inSyncReplicaCount = new AtomicInteger(0);
+    static ConcurrentHashMap<String, Vector<String>> streamStore = new ConcurrentHashMap<>();
 
 
 
@@ -281,6 +282,9 @@ public class Main {
                         break;
                     case "TYPE":
                         handleTypeCommand(command, os);
+                        break;
+                    case "XADD":
+                        handleXaddCommand(command, os);
                     default:
                         break;
                 }
@@ -434,4 +438,15 @@ public class Main {
         else
             os.write("+none\r\n".getBytes());
     }
+
+    public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
+        String key = command.get(1);
+        Vector<String> values = new Vector<>();
+        for(int i=3;i<command.size();i++) {
+            values.add(command.get(i));
+        }
+        String toReturn = command.get(2);
+        os.write(("+"+toReturn+"\r\n").getBytes());
+        streamStore.put(key, values);
+    }   
 }
