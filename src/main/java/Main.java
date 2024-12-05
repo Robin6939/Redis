@@ -4,7 +4,6 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Vector;
@@ -26,9 +25,10 @@ public class Main {
     static ConcurrentHashMap<String, String> dataStore = new ConcurrentHashMap<>();
     static ConcurrentHashMap<Socket, Boolean> replicaSockets = new ConcurrentHashMap<>();
     static AtomicInteger inSyncReplicaCount = new AtomicInteger(0);
-    static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();
-    static ConcurrentHashMap<Long, Long> streadIds = new ConcurrentHashMap<>();
+    static ConcurrentHashMap<String, Vector<String>> streamIds = new ConcurrentHashMap<>();//key -> streamkey, value -> id
+    static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();//key -> id, value -> key-val pairs
     static AtomicLong lastTimeId = new AtomicLong(-1);
+    static AtomicLong lastSeqId = new AtomicLong(-1);
 
 
 
@@ -438,65 +438,104 @@ public class Main {
         System.out.println(key);
         if(dataStore.getOrDefault(key, null)!=null)
             os.write("+string\r\n".getBytes());
-        else if(streamStore.getOrDefault(key, null)!=null)
+        else if(streadIds.getOrDefault(key, null)!=null)
             os.write("+stream\r\n".getBytes());
         else
             os.write("+none\r\n".getBytes());
     }
 
     public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
-        String key = command.get(1);
-        
-        if(streamStore.contains(key)) {
-            for(int i=3;i<command.size();i+=2) {
-                streamStore.get(key).put(command.get(i), command.get(i+1));
+        String key = command.get(1); //key is always present
+         
+        if(command.get(2).equals("*")) {// when entire id needs to be predicted by redis instance
+            long currentTimeMillis = System.currentTimeMillis();
+            String toReturn = currentTimeMillis+"-0";
+            send(toReturn, os);
+
+            if(streamIds.containsKey(key)) {
+                streamIds.get(key).add(toReturn);
             }
-        }
-        else {
+            else {
+                streamIds.put(key, new Vector<>(Arrays.asList(toReturn)));
+            } // push id inside the key vector
+
             ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
             for(int i=3;i<command.size();i+=2) {
                 values.put(command.get(i), command.get(i+1));
             }
-            streamStore.put(key, values);
+            streamStore.put(toReturn, values);//store all the key value pairs associated with that id
+
+            lastSeqId.set(0);
+            lastTimeId.set(currentTimeMillis);//update last seq and time id
         }
-         
-        if(command.get(2).equals("*")) {
-            long currentTimeMillis = System.currentTimeMillis();
-            String toReturn = currentTimeMillis+"-0";
-            send(toReturn, os);
-            streadIds.put(currentTimeMillis, (long)0);
-        }
-        else {
-            String[] id = command.get(2).split("-");
+        else { //at least the time id is present
+            String[] id = command.get(2).split("-"); 
             long timeId = Long.parseLong(id[0]);
             long seqId;
-            if(id[1].equals("*")) {
-                if(streadIds.containsKey(timeId)) {
-                    seqId = streadIds.get(timeId) + 1;
-                }   
-                else {
-                    if(timeId!=0)
-                        seqId = 0;
-                    else
-                        seqId = 1;
-                }
-                streadIds.put(timeId, seqId);
-                System.out.println("Sequence Id set to: "+seqId);
+            if(id[1].equals("*")) {//seq id needs to be predicted by the redis instance
+                if(lastTimeId.get() == timeId)
+                    seqId = lastSeqId.get()+1;
+                else
+                    seqId = 0;//ignoring the case where the time id is lessthan the lastTimeId
                 String toReturn = timeId+"-"+seqId;
                 os.write(("+"+toReturn+"\r\n").getBytes());
-            } else {
+
+                if(streamIds.containsKey(key)) {
+                    streamIds.get(key).add(toReturn);
+                }
+                else {
+                    streamIds.put(key, new Vector<>(Arrays.asList(toReturn)));
+                }  
+                
+                ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
+                for(int i=3;i<command.size();i+=2) {
+                    values.put(command.get(i), command.get(i+1));
+                }
+                streamStore.put(toReturn, values);
+
+                lastSeqId.set(seqId);
+                lastTimeId.set(timeId);
+            } else { //both the timeid and seqid is given where errors can also be there
                 seqId = Long.parseLong(id[1]);
                 String toReturn = command.get(2);
-                if(toReturn.equals("0-0")) {
+                if(toReturn.equals("0-0")) { //this is not allowed (0-0 is not but 1-0 is allowed)
                     os.write("-ERR The ID specified in XADD must be greater than 0-0\r\n".getBytes());
                 }
-                else if(timeId > lastTimeId.get()) {
+                else if(timeId > lastTimeId.get()) { //time id greater than the last one
                     os.write(("+"+toReturn+"\r\n").getBytes()); 
                     lastTimeId.set(timeId);
+                    lastSeqId.set(seqId);
+
+                    if(streamIds.containsKey(key)) {
+                        streamIds.get(key).add(toReturn);
+                    }
+                    else {
+                        streamIds.put(key, new Vector<>(Arrays.asList(toReturn)));
+                    } 
+
+                    ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
+                    for(int i=3;i<command.size();i+=2) {
+                        values.put(command.get(i), command.get(i+1));
+                    }
+                    streamStore.put(toReturn, values);
                 }
-                else if(timeId == lastTimeId.get() && (streadIds.containsKey(timeId)==false || streadIds.get(timeId)<seqId)) {
+                else if(timeId == lastTimeId.get() && (lastSeqId.get()<seqId)) { // if time id is same then the seq id needs to greater than the last one
                     os.write(("+"+toReturn+"\r\n").getBytes());
-                    streadIds.put(timeId, seqId);
+                    lastTimeId.set(timeId);
+                    lastSeqId.set(seqId);
+
+                    if(streamIds.containsKey(key)) {
+                        streamIds.get(key).add(toReturn);
+                    }
+                    else {
+                        streamIds.put(key, new Vector<>(Arrays.asList(toReturn)));
+                    } 
+
+                    ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
+                    for(int i=3;i<command.size();i+=2) {
+                        values.put(command.get(i), command.get(i+1));
+                    }
+                    streamStore.put(toReturn, values);
                 }
                 else {
                     os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
