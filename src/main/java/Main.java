@@ -296,6 +296,8 @@ public class Main {
                     case "XRANGE":
                         handleXrangeCommand(command, os);
                         break;
+                    case "XREAD":
+                        handleXreadCommand(command, os);
                     default:
                         break;
                 }
@@ -556,11 +558,15 @@ public class Main {
         }
     } 
 
+    /*
+     * XRANGE command
+     */
+
     public static boolean isIdGreaterEqualTo(String s1, String s2) { //returns true if s1>s2
         String id1[] = s1.split("-");
         String id2[] = s2.split("-");
         if(id2.length==1) {
-            if(Long.parseLong(id1[0])>Long.parseLong(id2[0]))
+            if(Long.parseLong(id1[0])>=Long.parseLong(id2[0]))
                 return true;
             else
                 return false;
@@ -575,15 +581,11 @@ public class Main {
         }
     }
 
-    /*
-     * This is for XRANGE command
-     */
-
     public static boolean isIdLesserEqualTo(String s1, String s2) { //returns true if s1>s2
         String id1[] = s1.split("-");
         String id2[] = s2.split("-");
         if(id2.length==1) {
-            if(Long.parseLong(id1[0])<Long.parseLong(id2[0]))
+            if(Long.parseLong(id1[0])<=Long.parseLong(id2[0]))
                 return true;
             else
                 return false;
@@ -621,11 +623,82 @@ public class Main {
         Vector<String> validId = new Vector<>();
         for(String s:streamIds.get(key)) {
             if((command.get(2).equals("-") || isIdGreaterEqualTo(s, command.get(2))) && (command.get(3).equals("+") || isIdLesserEqualTo(s, command.get(3)))) {
-                System.out.println(s+" : "+streamStore.get(s)); 
                 validId.add(s);
             }
         }
         sendForXRange(validId, os);
+    }
+
+    /*
+    * XREAD command 
+    */
+
+    public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, OutputStream os) throws IOException {
+        // Number of streams in the response
+        os.write(("*" + validIdsPerKey.size() + "\r\n").getBytes());
+    
+        for (String key : validIdsPerKey.keySet()) {
+
+            os.write(("*2\r\n").getBytes()); //first is key second is the pairs of values
+            // Write the stream key
+            send(key, os);
+    
+            // Fetch all valid IDs for the current key
+            Vector<String> validIds = validIdsPerKey.get(key);
+    
+            // Write the number of IDs and their corresponding key-value pairs
+            os.write(("*" + validIds.size() + "\r\n").getBytes());
+    
+            for (String id : validIds) {
+                os.write(("*2\r\n").getBytes()); // Each entry has ID and map (field-value pairs)
+    
+                // Write the ID
+                send(id, os);
+    
+                // Fetch and send field-value pairs for this ID
+                ConcurrentHashMap<String, String> keyValuePairs = streamStore.get(id);
+                int sizeMap = keyValuePairs.size() * 2;
+                os.write(("*" + sizeMap + "\r\n").getBytes());
+    
+                for (String field : keyValuePairs.keySet()) {
+                    send(field, os);               // Field
+                    send(keyValuePairs.get(field), os); // Value
+                }
+            }
+        }
+    }
+    
+
+    public static void handleXreadCommand(Vector<String> command, OutputStream os) {
+        try {
+            ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
+            int numKeys = (command.size() - 2) / 2; // Number of stream keys
+    
+            for (int i = 0; i < numKeys; i++) {
+                String key = command.get(2 + i);           // Get the key
+                String idGiven = command.get(2 + numKeys + i); // Corresponding starting ID
+    
+                // Fetch all valid IDs for this key
+                Vector<String> validIds = new Vector<>();
+                if (streamIds.containsKey(key)) {
+                    for (String id : streamIds.get(key)) {
+                        if (isIdGreaterEqualTo(id, idGiven)) {
+                            validIds.add(id);
+                        }
+                    }
+                }
+    
+                // Store the valid IDs for this key
+                validIdsPerKey.put(key, validIds);
+            }
+
+            System.out.println(validIdsPerKey);
+    
+            // Send the response for all keys
+            sendForXread(validIdsPerKey, os);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
     
