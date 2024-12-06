@@ -633,7 +633,7 @@ public class Main {
     * XREAD command 
     */
 
-    public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, OutputStream os) throws IOException {
+    public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, Vector<String> keyOrder, OutputStream os) throws IOException {
         if(validIdsPerKey.size()==0) {
             os.write("$-1\r\n".getBytes());
             return;
@@ -641,12 +641,12 @@ public class Main {
         // Number of streams in the response
         os.write(("*" + validIdsPerKey.size() + "\r\n").getBytes());
     
-        for (String key : validIdsPerKey.keySet()) {
+        for (String key : keyOrder) {
 
             os.write(("*2\r\n").getBytes()); //first is key second is the pairs of values
             // Write the stream key
             send(key, os);
-    
+            
             // Fetch all valid IDs for the current key
             Vector<String> validIds = validIdsPerKey.get(key);
     
@@ -670,12 +670,15 @@ public class Main {
                 }
             }
         }
+        System.out.println("Sent for xread over");
     }
     
 
     public static void handleXreadCommand(Vector<String> command, OutputStream os) {
         try {
             boolean isBlocking = command.get(1).equalsIgnoreCase("BLOCK")?true:false;
+            if(isBlocking)
+                System.out.println("This is read with blocking command");
             int skip = isBlocking?4:2;//two new stings added when block is present in the command
             ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
             int numKeys = (command.size() - skip) / 2; // Number of stream keys
@@ -694,6 +697,7 @@ public class Main {
                     System.out.println("No data has been set to false as the timer is over");
                 }
             });
+            Vector<String> keyOrder = new Vector<>();
             while(noData.get()==true) {
                 for (int i = 0; i < numKeys; i++) {
                     String key = command.get(skip + i);               // Get the key
@@ -708,12 +712,14 @@ public class Main {
                             }
                         }
                     }
-                    if(validIds.size()!=0)
+                    if(validIds.size()!=0) {
                         validIdsPerKey.put(key, validIds);
+                        keyOrder.add(key); //used to maintain order of the keys while sending response back
+                    }
                 }
             }    
             // Send the response for all keys
-            sendForXread(validIdsPerKey, os);
+            sendForXread(validIdsPerKey, keyOrder, os);
         } catch (IOException e) {
             e.printStackTrace();
         }
