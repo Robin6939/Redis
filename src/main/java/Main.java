@@ -634,6 +634,10 @@ public class Main {
     */
 
     public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, OutputStream os) throws IOException {
+        if(validIdsPerKey.size()==0) {
+            os.write("$-1\r\n".getBytes());
+            return;
+        }
         // Number of streams in the response
         os.write(("*" + validIdsPerKey.size() + "\r\n").getBytes());
     
@@ -671,29 +675,43 @@ public class Main {
 
     public static void handleXreadCommand(Vector<String> command, OutputStream os) {
         try {
+            boolean isBlocking = command.get(1).equalsIgnoreCase("BLOCK")?true:false;
+            int skip = isBlocking?4:2;//two new stings added when block is present in the command
             ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
-            int numKeys = (command.size() - 2) / 2; // Number of stream keys
-    
-            for (int i = 0; i < numKeys; i++) {
-                String key = command.get(2 + i);           // Get the key
-                String idGiven = command.get(2 + numKeys + i); // Corresponding starting ID
-    
-                // Fetch all valid IDs for this key
-                Vector<String> validIds = new Vector<>();
-                if (streamIds.containsKey(key)) {
-                    for (String id : streamIds.get(key)) {
-                        if (isIdGreaterEqualTo(id, idGiven)) {
-                            validIds.add(id);
+            int numKeys = (command.size() - skip) / 2; // Number of stream keys
+            int timeout = isBlocking?Integer.parseInt(command.get(2)):0;//when it is not blocking timeout would be zero which executes the below code effectively just once
+            System.out.println("The timeout is : "+timeout);
+
+            AtomicBoolean noData = new AtomicBoolean(true);
+            threadPool.submit(() -> {
+                try {
+                    Thread.sleep(timeout);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                if(noData.get()) {
+                    noData.set(false);
+                    System.out.println("No data has been set to false as the timer is over");
+                }
+            });
+            while(noData.get()==true) {
+                for (int i = 0; i < numKeys; i++) {
+                    String key = command.get(skip + i);               // Get the key
+                    String idGiven = command.get(skip + numKeys + i); // Corresponding starting ID
+                    // Fetch all valid IDs for this key
+                    Vector<String> validIds = new Vector<>();
+                    if (streamIds.containsKey(key)) {
+                        for (String id : streamIds.get(key)) {
+                            if (isIdGreaterEqualTo(id, idGiven) && id.equalsIgnoreCase(idGiven)==false) {
+                                noData.set(false);
+                                validIds.add(id);
+                            }
                         }
                     }
+                    if(validIds.size()!=0)
+                        validIdsPerKey.put(key, validIds);
                 }
-    
-                // Store the valid IDs for this key
-                validIdsPerKey.put(key, validIds);
-            }
-
-            System.out.println(validIdsPerKey);
-    
+            }    
             // Send the response for all keys
             sendForXread(validIdsPerKey, os);
         } catch (IOException e) {
