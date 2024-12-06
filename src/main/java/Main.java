@@ -157,7 +157,7 @@ public class Main {
 
 
     public static void main(String args[]) throws IOException {
-        System.out.println("Program started successfully!!");
+        //System.out.println("Program started successfully!!");
         if(args.length < 3) {
             setupMaster(args);
         }
@@ -171,7 +171,7 @@ public class Main {
 
 
     public static void setupSlave(String[] args) throws UnknownHostException, IOException {
-        System.out.println("Setting up slave");
+        //System.out.println("Setting up slave");
         port = Integer.parseInt(args[1]);
         isMaster = false;
         String masterHost = args[3].substring(0, args[3].length()-5);
@@ -201,7 +201,7 @@ public class Main {
     }
 
     public static void handleHandshake() throws IOException {
-        System.out.println("Handshake started");
+        //System.out.println("Handshake started");
 
         InputStream is = masterSocket.getInputStream();
         OutputStream os = masterSocket.getOutputStream();
@@ -229,7 +229,7 @@ public class Main {
     }
 
     public static void setupMaster(String[] args) throws IOException {
-        System.out.println("Setting up master");
+        //System.out.println("Setting up master");
         isMaster = true;
         port = args.length==0?6379:Integer.parseInt(args[1]);
         try (ServerSocket serverSocket = new ServerSocket(port)) {
@@ -298,6 +298,10 @@ public class Main {
                         break;
                     case "XREAD":
                         handleXreadCommand(command, os);
+                        break;
+                    case "INCR":
+                        handleIncrCommand(command, os);
+                        break;
                     default:
                         break;
                 }
@@ -384,7 +388,7 @@ public class Main {
                   Thread.sleep(ms);
                   dataStore.remove(command.get(1));
                 } catch (InterruptedException e) {
-                  System.out.println(e);
+                  //System.out.println(e);
                 }
               }
             };
@@ -445,7 +449,7 @@ public class Main {
 
     public static void handleTypeCommand(Vector<String> command, OutputStream os) throws IOException {
         String key = command.get(1);
-        System.out.println(key);
+        //System.out.println(key);
         if(dataStore.getOrDefault(key, null)!=null)
             os.write("+string\r\n".getBytes());
         else if(streamIds.getOrDefault(key, null)!=null)
@@ -455,9 +459,9 @@ public class Main {
     }
 
     public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
-        System.out.println("This is an XADD command");
+        //System.out.println("This is an XADD command");
         String key = command.get(1); //key is always present
-        System.out.println("The xadd command is: "+command);
+        //System.out.println("The xadd command is: "+command);
         if(command.get(2).equals("*")) {// when entire id needs to be predicted by redis instance
             long currentTimeMillis = System.currentTimeMillis();
             String toReturn = currentTimeMillis+"-0";
@@ -532,7 +536,7 @@ public class Main {
                         values.put(command.get(i), command.get(i+1));
                     }
                     streamStore.put(toReturn, values);
-                    System.out.println("xadd over");
+                    //System.out.println("xadd over");
                 }
                 else if(timeId == lastTimeId.get() && (lastSeqId.get()<seqId)) { // if time id is same then the seq id needs to greater than the last one
                     os.write(("+"+toReturn+"\r\n").getBytes());
@@ -551,7 +555,7 @@ public class Main {
                         values.put(command.get(i), command.get(i+1));
                     }
                     streamStore.put(toReturn, values);
-                    System.out.println("xadd over");
+                    //System.out.println("xadd over");
                 }
                 else {
                     os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
@@ -567,7 +571,7 @@ public class Main {
     public static boolean isIdGreaterEqualTo(String s1, String s2) { //returns true if s1>s2
         String id1[] = s1.split("-");
         String id2[] = s2.split("-");
-        // System.out.println("Comparing "+s1+" and "+s2);
+        // //System.out.println("Comparing "+s1+" and "+s2);
         if(id2.length==1) {
             if(Long.parseLong(id1[0])>=Long.parseLong(id2[0]))
                 return true;
@@ -622,7 +626,7 @@ public class Main {
 
     public static void handleXrangeCommand(Vector<String> command, OutputStream os) throws IOException {
         String key = command.get(1);
-        System.out.println(streamIds.get(key));
+        //System.out.println(streamIds.get(key));
         Vector<String> validId = new Vector<>();
         for(String s:streamIds.get(key)) {
             if((command.get(2).equals("-") || isIdGreaterEqualTo(s, command.get(2))) && (command.get(3).equals("+") || isIdLesserEqualTo(s, command.get(3)))) {
@@ -637,7 +641,7 @@ public class Main {
     */
 
     public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, Vector<String> keyOrder, OutputStream os) throws IOException {
-        System.out.println("This is going to be sent: "+ validIdsPerKey);
+        //System.out.println("This is going to be sent: "+ validIdsPerKey);
         if(validIdsPerKey.size()==0) {
             os.write("$-1\r\n".getBytes());
             return;
@@ -674,14 +678,14 @@ public class Main {
                 }
             }
         }
-        System.out.println("Sent for xread over");
+        //System.out.println("Sent for xread over");
     }
     
 
     public static void handleXreadCommand(Vector<String> command, OutputStream os) {
         boolean isBlocking = command.get(1).equalsIgnoreCase("BLOCK")?true:false;
         if(isBlocking)
-            System.out.println("This is read with blocking command");
+            //System.out.println("This is read with blocking command");
         int skip = isBlocking?4:2;//two new stings added when block is present in the command
         ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
         int numKeys = (command.size() - skip) / 2; // Number of stream keys
@@ -697,12 +701,12 @@ public class Main {
             }
             if(noData.get()) {
                 noData.set(false);
-                System.out.println("No_data_var: has been set to false as the timer is over");
+                //System.out.println("No_data_var: has been set to false as the timer is over");
             }
         });
         threadPool.submit(() -> { //running this snippet in a different thread because the main thread might need to receive any further communication with the client regarding xadds commands
             Vector<String> keyOrder = new Vector<>();  
-            // System.out.println()   
+            // //System.out.println()   
             String lastId = lastTimeId.get()+"-"+lastSeqId.get();       
             while(noData.get()==true) {
                 try {
@@ -710,9 +714,9 @@ public class Main {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                // System.out.println("1noData.get() = "+noData.get());
+                // //System.out.println("1noData.get() = "+noData.get());
                 for (int i = 0; i < numKeys; i++) {
-                    // System.out.println("2noData.get() = "+noData.get());
+                    // //System.out.println("2noData.get() = "+noData.get());
                     String key = command.get(skip + i);               // Get the key
                     String idGiven = command.get(skip + numKeys + i); // Corresponding starting ID
                     Vector<String> validIds = new Vector<>();
@@ -720,17 +724,17 @@ public class Main {
                         idGiven = lastId;
                     if (streamIds.containsKey(key)) {
                         for (String id : streamIds.get(key)) {
-                            // System.out.println("3noData.get() = "+noData.get());
+                            // //System.out.println("3noData.get() = "+noData.get());
                             if (isIdGreaterEqualTo(id, idGiven) && id.equalsIgnoreCase(idGiven)==false) {
-                                // System.out.println("Inside the if command");
+                                // //System.out.println("Inside the if command");
                                 noData.set(false);
                                 validIds.add(id);
                             }
-                            // System.out.println("4noData.get() = "+noData.get());
+                            // //System.out.println("4noData.get() = "+noData.get());
                         }
                     }
                     if(validIds.size()!=0) {
-                        // System.out.println("Debug point 1");
+                        // //System.out.println("Debug point 1");
                         validIdsPerKey.put(key, validIds);
                         keyOrder.add(key); //used to maintain order of the keys while sending response back
                     }
@@ -741,13 +745,35 @@ public class Main {
                     e.printStackTrace();
                 }
             } 
-            System.out.println("Out of while loop since var is false now");   
+            //System.out.println("Out of while loop since var is false now");   
             try {
                 sendForXread(validIdsPerKey, keyOrder, os);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
+    }
+
+    /*
+     * INCR command
+     */
+
+    public static void handleIncrCommand(Vector<String> command, OutputStream os) throws IOException {
+        String var = command.get(1);
+        if(dataStore.containsKey(var)) {
+            try {
+                int x = Integer.parseInt(dataStore.get(var))+1;
+                dataStore.put(var, x+"");
+                send(x, os);
+            } catch(Exception e) {
+                //System.out.println(e);
+                os.write("-ERR value is not an integer or out of range\r\n".getBytes());
+            }
+        }
+        else {
+            dataStore.put(var, "1");
+            send(1, os);
+        }
     }
 }
     
