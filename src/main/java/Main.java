@@ -532,6 +532,7 @@ public class Main {
                         values.put(command.get(i), command.get(i+1));
                     }
                     streamStore.put(toReturn, values);
+                    System.out.println("xadd over");
                 }
                 else if(timeId == lastTimeId.get() && (lastSeqId.get()<seqId)) { // if time id is same then the seq id needs to greater than the last one
                     os.write(("+"+toReturn+"\r\n").getBytes());
@@ -550,6 +551,7 @@ public class Main {
                         values.put(command.get(i), command.get(i+1));
                     }
                     streamStore.put(toReturn, values);
+                    System.out.println("xadd over");
                 }
                 else {
                     os.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".getBytes());
@@ -565,6 +567,7 @@ public class Main {
     public static boolean isIdGreaterEqualTo(String s1, String s2) { //returns true if s1>s2
         String id1[] = s1.split("-");
         String id2[] = s2.split("-");
+        // System.out.println("Comparing "+s1+" and "+s2);
         if(id2.length==1) {
             if(Long.parseLong(id1[0])>=Long.parseLong(id2[0]))
                 return true;
@@ -634,6 +637,7 @@ public class Main {
     */
 
     public static void sendForXread(ConcurrentHashMap<String, Vector<String>> validIdsPerKey, Vector<String> keyOrder, OutputStream os) throws IOException {
+        System.out.println("This is going to be sent: "+ validIdsPerKey);
         if(validIdsPerKey.size()==0) {
             os.write("$-1\r\n".getBytes());
             return;
@@ -675,60 +679,75 @@ public class Main {
     
 
     public static void handleXreadCommand(Vector<String> command, OutputStream os) {
-        try {
-            boolean isBlocking = command.get(1).equalsIgnoreCase("BLOCK")?true:false;
-            if(isBlocking)
-                System.out.println("This is read with blocking command");
-            int skip = isBlocking?4:2;//two new stings added when block is present in the command
-            ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
-            int numKeys = (command.size() - skip) / 2; // Number of stream keys
-            
-            int timeout = isBlocking?(Integer.parseInt(command.get(2))==0?5000:Integer.parseInt(command.get(2))):0;//when it is not blocking timeout would be zero which executes the below code effectively just once and if it is block 0 that means wait indefinetely but in that case we wait for 8 seconds because 10 seconds is the timeout for execution
-            System.out.println("The timeout is : "+timeout);
+        boolean isBlocking = command.get(1).equalsIgnoreCase("BLOCK")?true:false;
+        if(isBlocking)
+            System.out.println("This is read with blocking command");
+        int skip = isBlocking?4:2;//two new stings added when block is present in the command
+        ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
+        int numKeys = (command.size() - skip) / 2; // Number of stream keys
+        
+        int timeout = isBlocking?(Integer.parseInt(command.get(2))==0?5000:Integer.parseInt(command.get(2))):50;//when it is not blocking timeout would be zero which executes the below code effectively just once and if it is block 0 that means wait indefinetely but in that case we wait for 8 seconds because 10 seconds is the timeout for execution and put 50 ms for non blocking to start the while loop
 
-            AtomicBoolean noData = new AtomicBoolean(true);
-            threadPool.submit(() -> {
+        AtomicBoolean noData = new AtomicBoolean(true);
+        threadPool.submit(() -> {
+            try {
+                Thread.sleep(timeout);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            if(noData.get()) {
+                noData.set(false);
+                System.out.println("No_data_var: has been set to false as the timer is over");
+            }
+        });
+        threadPool.submit(() -> { //running this snippet in a different thread because the main thread might need to receive any further communication with the client regarding xadds commands
+            Vector<String> keyOrder = new Vector<>();  
+            // System.out.println()   
+            String lastId = lastTimeId.get()+"-"+lastSeqId.get();       
+            while(noData.get()==true) {
                 try {
-                    Thread.sleep(timeout);
+                    Thread.sleep(20);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                if(noData.get()) {
-                    noData.set(false);
-                    System.out.println("No data has been set to false as the timer is over");
-                }
-            });
-            Vector<String> keyOrder = new Vector<>();
-            while(noData.get()==true) {
-                // System.out.println("Still looking for data");
+                // System.out.println("1noData.get() = "+noData.get());
                 for (int i = 0; i < numKeys; i++) {
+                    // System.out.println("2noData.get() = "+noData.get());
                     String key = command.get(skip + i);               // Get the key
                     String idGiven = command.get(skip + numKeys + i); // Corresponding starting ID
-                    if(idGiven.equals("$")) {
-                        idGiven = lastTimeId+"-"+lastSeqId;
-                        System.out.println("This is what we would be waiting on for: "+idGiven);
-                    }
-                    // Fetch all valid IDs for this key
                     Vector<String> validIds = new Vector<>();
+                    if(idGiven.equals("$"))
+                        idGiven = lastId;
                     if (streamIds.containsKey(key)) {
                         for (String id : streamIds.get(key)) {
+                            // System.out.println("3noData.get() = "+noData.get());
                             if (isIdGreaterEqualTo(id, idGiven) && id.equalsIgnoreCase(idGiven)==false) {
+                                // System.out.println("Inside the if command");
                                 noData.set(false);
                                 validIds.add(id);
                             }
+                            // System.out.println("4noData.get() = "+noData.get());
                         }
                     }
                     if(validIds.size()!=0) {
+                        // System.out.println("Debug point 1");
                         validIdsPerKey.put(key, validIds);
                         keyOrder.add(key); //used to maintain order of the keys while sending response back
                     }
                 }
-            }    
-            // Send the response for all keys
-            sendForXread(validIdsPerKey, keyOrder, os);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            } 
+            System.out.println("Out of while loop since var is false now");   
+            try {
+                sendForXread(validIdsPerKey, keyOrder, os);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }
     
