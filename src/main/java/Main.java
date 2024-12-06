@@ -726,7 +726,8 @@ public class Main {
                 System.out.println("No_data_var: has been set to false as the timer is over");
             }
         });
-        threadPool.submit(() -> { //running this snippet in a different thread because the main thread might need to receive any further communication with the client regarding xadds commands
+        // threadPool.submit(() -> { 
+            //running this snippet in a different thread because the main thread might need to receive any further communication with the client regarding xadds commands
             Vector<String> keyOrder = new Vector<>();  
             // System.out.println()   
             String lastId = lastTimeId.get()+"-"+lastSeqId.get();       
@@ -773,7 +774,7 @@ public class Main {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        });
+        // });
     }
 
     /*
