@@ -262,9 +262,11 @@ public class Main {
                 Vector<String> command = new Vector<>();
                 readCommand(is, command);
                 if(multi==true) {
-                    commandHold.add(command);
-                    os.write("+QUEUED\r\n".getBytes());
-                    continue;
+                    if(command.get(0).toUpperCase().equals("EXEC")==false) {
+                        commandHold.add(command);
+                        os.write("+QUEUED\r\n".getBytes());
+                        continue;
+                    }
                 }
                 switch (command.get(0).toUpperCase()) {
                     case "ECHO":
