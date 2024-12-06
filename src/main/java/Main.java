@@ -575,6 +575,10 @@ public class Main {
         }
     }
 
+    /*
+     * This is for XRANGE command
+     */
+
     public static boolean isIdLesserEqualTo(String s1, String s2) { //returns true if s1>s2
         String id1[] = s1.split("-");
         String id2[] = s2.split("-");
@@ -601,7 +605,6 @@ public class Main {
             int sizeMap = streamStore.get(id).size();
             os.write(("*"+sizeMap+"\r\n").getBytes());
             send(id, os);
-            // os.write(("*"+sizeMap*2+"\r\n").getBytes());
             String keyVal[] = new String[sizeMap*2];
             int i=0;
             for(String key: streamStore.get(id).keySet()) {
@@ -617,7 +620,7 @@ public class Main {
         System.out.println(streamIds.get(key));
         Vector<String> validId = new Vector<>();
         for(String s:streamIds.get(key)) {
-            if(isIdGreaterEqualTo(s, command.get(2)) && isIdLesserEqualTo(s, command.get(3))) {
+            if((command.get(2).equals("-") || isIdGreaterEqualTo(s, command.get(2))) && (command.get(3).equals("+") || isIdLesserEqualTo(s, command.get(3)))) {
                 System.out.println(s+" : "+streamStore.get(s)); 
                 validId.add(s);
             }
