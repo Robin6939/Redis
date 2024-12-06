@@ -683,7 +683,7 @@ public class Main {
             ConcurrentHashMap<String, Vector<String>> validIdsPerKey = new ConcurrentHashMap<>();
             int numKeys = (command.size() - skip) / 2; // Number of stream keys
             
-            int timeout = isBlocking?(Integer.parseInt(command.get(2))==0?8000:Integer.parseInt(command.get(2))):0;//when it is not blocking timeout would be zero which executes the below code effectively just once and if it is block 0 that means wait indefinetely but in that case we wait for 9 seconds because 10 seconds is the timeout for execution
+            int timeout = isBlocking?(Integer.parseInt(command.get(2))==0?5000:Integer.parseInt(command.get(2))):0;//when it is not blocking timeout would be zero which executes the below code effectively just once and if it is block 0 that means wait indefinetely but in that case we wait for 8 seconds because 10 seconds is the timeout for execution
             System.out.println("The timeout is : "+timeout);
 
             AtomicBoolean noData = new AtomicBoolean(true);
@@ -700,9 +700,14 @@ public class Main {
             });
             Vector<String> keyOrder = new Vector<>();
             while(noData.get()==true) {
+                // System.out.println("Still looking for data");
                 for (int i = 0; i < numKeys; i++) {
                     String key = command.get(skip + i);               // Get the key
                     String idGiven = command.get(skip + numKeys + i); // Corresponding starting ID
+                    if(idGiven.equals("$")) {
+                        idGiven = lastTimeId+"-"+lastSeqId;
+                        System.out.println("This is what we would be waiting on for: "+idGiven);
+                    }
                     // Fetch all valid IDs for this key
                     Vector<String> validIds = new Vector<>();
                     if (streamIds.containsKey(key)) {
