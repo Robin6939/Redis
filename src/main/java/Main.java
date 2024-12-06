@@ -157,6 +157,7 @@ public class Main {
 
 
     public static void main(String args[]) throws IOException {
+        System.out.println("Program started successfully!!");
         if(args.length < 3) {
             setupMaster(args);
         }
@@ -170,6 +171,7 @@ public class Main {
 
 
     public static void setupSlave(String[] args) throws UnknownHostException, IOException {
+        System.out.println("Setting up slave");
         port = Integer.parseInt(args[1]);
         isMaster = false;
         String masterHost = args[3].substring(0, args[3].length()-5);
@@ -199,6 +201,7 @@ public class Main {
     }
 
     public static void handleHandshake() throws IOException {
+        System.out.println("Handshake started");
 
         InputStream is = masterSocket.getInputStream();
         OutputStream os = masterSocket.getOutputStream();
@@ -226,6 +229,7 @@ public class Main {
     }
 
     public static void setupMaster(String[] args) throws IOException {
+        System.out.println("Setting up master");
         isMaster = true;
         port = args.length==0?6379:Integer.parseInt(args[1]);
         try (ServerSocket serverSocket = new ServerSocket(port)) {
@@ -255,7 +259,7 @@ public class Main {
             if(ch=='*') {
                 Vector<String> command = new Vector<>();
                 readCommand(is, command);
-                switch (command.get(0)) {
+                switch (command.get(0).toUpperCase()) {
                     case "ECHO":
                         handleEchoCommand(command, os);
                         break;
@@ -288,6 +292,10 @@ public class Main {
                         break;
                     case "XADD":
                         handleXaddCommand(command, os);
+                        break;
+                    case "XRANGE":
+                        handleXrangeCommand(command, os);
+                        break;
                     default:
                         break;
                 }
@@ -445,8 +453,9 @@ public class Main {
     }
 
     public static void handleXaddCommand(Vector<String> command, OutputStream os) throws IOException {
+        System.out.println("This is an XADD command");
         String key = command.get(1); //key is always present
-         
+        System.out.println("The xadd command is: "+command);
         if(command.get(2).equals("*")) {// when entire id needs to be predicted by redis instance
             long currentTimeMillis = System.currentTimeMillis();
             String toReturn = currentTimeMillis+"-0";
@@ -477,6 +486,9 @@ public class Main {
                     seqId = lastSeqId.get()+1;
                 else
                     seqId = 0;//ignoring the case where the time id is lessthan the lastTimeId
+                if(timeId==0 && seqId==0) {
+                    seqId++;
+                }
                 String toReturn = timeId+"-"+seqId;
                 os.write(("+"+toReturn+"\r\n").getBytes());
 
@@ -542,5 +554,75 @@ public class Main {
                 }
             }
         }
-    }   
+    } 
+
+    public static boolean isIdGreaterEqualTo(String s1, String s2) { //returns true if s1>s2
+        String id1[] = s1.split("-");
+        String id2[] = s2.split("-");
+        if(id2.length==1) {
+            if(Long.parseLong(id1[0])>Long.parseLong(id2[0]))
+                return true;
+            else
+                return false;
+        }
+        else {
+            if(Long.parseLong(id1[0])>Long.parseLong(id2[0]))
+                return true;
+            else if(Long.parseLong(id1[0])==Long.parseLong(id2[0]) && Long.parseLong(id1[1])>=Long.parseLong(id2[1]))
+                return true;
+            else
+                return false;
+        }
+    }
+
+    public static boolean isIdLesserEqualTo(String s1, String s2) { //returns true if s1>s2
+        String id1[] = s1.split("-");
+        String id2[] = s2.split("-");
+        if(id2.length==1) {
+            if(Long.parseLong(id1[0])<Long.parseLong(id2[0]))
+                return true;
+            else
+                return false;
+        }
+        else {
+            if(Long.parseLong(id1[0])<Long.parseLong(id2[0]))
+                return true;
+            else if(Long.parseLong(id1[0])==Long.parseLong(id2[0]) && Long.parseLong(id1[1])<=Long.parseLong(id2[1]))
+                return true;
+            else
+                return false;
+        }
+    }
+
+    public static void sendForXRange(Vector<String> validId, OutputStream os) throws IOException {
+        int size = validId.size();
+        os.write(("*"+size+"\r\n").getBytes());
+        for(String id: validId) {
+            int sizeMap = streamStore.get(id).size();
+            os.write(("*"+sizeMap+"\r\n").getBytes());
+            send(id, os);
+            // os.write(("*"+sizeMap*2+"\r\n").getBytes());
+            String keyVal[] = new String[sizeMap*2];
+            int i=0;
+            for(String key: streamStore.get(id).keySet()) {
+                keyVal[i++] = (key);
+                keyVal[i++] = (streamStore.get(id).get(key));
+            }
+            send(keyVal, os);
+        }
+    }
+
+    public static void handleXrangeCommand(Vector<String> command, OutputStream os) throws IOException {
+        String key = command.get(1);
+        System.out.println(streamIds.get(key));
+        Vector<String> validId = new Vector<>();
+        for(String s:streamIds.get(key)) {
+            if(isIdGreaterEqualTo(s, command.get(2)) && isIdLesserEqualTo(s, command.get(3))) {
+                System.out.println(s+" : "+streamStore.get(s)); 
+                validId.add(s);
+            }
+        }
+        sendForXRange(validId, os);
+    }
 }
+    
