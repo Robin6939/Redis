@@ -254,11 +254,18 @@ public class Main {
     public static void handleClients(Socket socket) throws IOException, InterruptedException {
         InputStream is = socket.getInputStream();
         OutputStream os = socket.getOutputStream();
+        boolean multi = false;
+        Vector<Vector<String>> commandHold = new Vector<>();
         while(true) {
             char ch = (char)is.read();
             if(ch=='*') {
                 Vector<String> command = new Vector<>();
                 readCommand(is, command);
+                if(multi==true) {
+                    commandHold.add(command);
+                    os.write("+QUEUED\r\n".getBytes());
+                    continue;
+                }
                 switch (command.get(0).toUpperCase()) {
                     case "ECHO":
                         handleEchoCommand(command, os);
@@ -302,12 +309,27 @@ public class Main {
                     case "INCR":
                         handleIncrCommand(command, os);
                         break;
+                    case "MULTI":
+                        multi=true;
+                        os.write("+OK\r\n".getBytes());
+                        break;
+                    case "EXEC":
+                        if(multi==false) 
+                            os.write("-ERR EXEC without MULTI\r\n".getBytes());
+                        else {
+                            if(commandHold.size()==0) {
+                                os.write("*0\r\n".getBytes());
+                                multi = false;
+                            }
+                        }
+                        break;
                     default:
                         break;
                 }
             }
         }   
     }
+
 
     // Command Handlers
     public static void handleEchoCommand(Vector<String> command, OutputStream os) throws IOException {
