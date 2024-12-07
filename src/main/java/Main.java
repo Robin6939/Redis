@@ -29,6 +29,7 @@ public class Main {
     static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();//key -> id, value -> key-val pairs
     static AtomicLong lastTimeId = new AtomicLong(-1);
     static AtomicLong lastSeqId = new AtomicLong(-1);
+    static Vector<Vector<String>> commandHold = new Vector<>();
 
 
 
@@ -151,7 +152,9 @@ public class Main {
         }
     }
 
-
+    public synchronized static void addCommandForExec(Vector<String> command) {
+        commandHold.add(command);
+    }
 
 
 
@@ -254,8 +257,8 @@ public class Main {
     public static void handleClients(Socket socket) throws IOException, InterruptedException {
         InputStream is = socket.getInputStream();
         OutputStream os = socket.getOutputStream();
-        boolean multi = false;
-        Vector<Vector<String>> commandHold = new Vector<>();
+        Boolean multi = false;
+        
         while(true) {
             char ch = (char)is.read();
             if(ch=='*') {
@@ -263,73 +266,144 @@ public class Main {
                 readCommand(is, command);
                 if(multi==true) {
                     if(command.get(0).toUpperCase().equals("EXEC")==false) {
-                        commandHold.add(command);
+                        addCommandForExec(command);
                         os.write("+QUEUED\r\n".getBytes());
                         continue;
                     }
-                }
-                switch (command.get(0).toUpperCase()) {
-                    case "ECHO":
-                        handleEchoCommand(command, os);
-                        break;
-                    case "PING":
-                        if(socket.equals(masterSocket)==false) //coming from client
-                            handlePingCommand(command, os);
-                        else
-                            countBytes.addAndGet(14);
-                        break;
-                    case "SET":
-                        handleSetCommand(socket, command, os);
-                        break;
-                    case "GET":
-                        handleGetCommand(command, os);
-                        break;
-                    case "REPLCONF":
-                        handleReplconfCommand(socket, command, os);
-                        break;
-                    case "INFO":
-                        handleInfoCommand(command, os);
-                        break;
-                    case "PSYNC":
-                        handlePsyncCommand(command, os);
-                        break;
-                    case "WAIT":
-                        handleWaitCommand(command, os);
-                        break;
-                    case "TYPE":
-                        handleTypeCommand(command, os);
-                        break;
-                    case "XADD":
-                        handleXaddCommand(command, os);
-                        break;
-                    case "XRANGE":
-                        handleXrangeCommand(command, os);
-                        break;
-                    case "XREAD":
-                        handleXreadCommand(command, os);
-                        break;
-                    case "INCR":
-                        handleIncrCommand(command, os);
-                        break;
-                    case "MULTI":
-                        multi=true;
-                        os.write("+OK\r\n".getBytes());
-                        break;
-                    case "EXEC":
-                        if(multi==false) 
-                            os.write("-ERR EXEC without MULTI\r\n".getBytes());
-                        else {
-                            if(commandHold.size()==0) {
-                                os.write("*0\r\n".getBytes());
-                                multi = false;
-                            }
-                        }
-                        break;
-                    default:
-                        break;
-                }
+                } 
+                multi = chooseCommand(socket, command, os, multi);
+                // switch (command.get(0).toUpperCase()) {
+                //     case "ECHO":
+                //         handleEchoCommand(command, os);
+                //         break;
+                //     case "PING":
+                //         if(socket.equals(masterSocket)==false) //coming from client
+                //             handlePingCommand(command, os);
+                //         else
+                //             countBytes.addAndGet(14);
+                //         break;
+                //     case "SET":
+                //         handleSetCommand(socket, command, os);
+                //         break;
+                //     case "GET":
+                //         handleGetCommand(command, os);
+                //         break;
+                //     case "REPLCONF":
+                //         handleReplconfCommand(socket, command, os);
+                //         break;
+                //     case "INFO":
+                //         handleInfoCommand(command, os);
+                //         break;
+                //     case "PSYNC":
+                //         handlePsyncCommand(command, os);
+                //         break;
+                //     case "WAIT":
+                //         handleWaitCommand(command, os);
+                //         break;
+                //     case "TYPE":
+                //         handleTypeCommand(command, os);
+                //         break;
+                //     case "XADD":
+                //         handleXaddCommand(command, os);
+                //         break;
+                //     case "XRANGE":
+                //         handleXrangeCommand(command, os);
+                //         break;
+                //     case "XREAD":
+                //         handleXreadCommand(command, os);
+                //         break;
+                //     case "INCR":
+                //         handleIncrCommand(command, os);
+                //         break;
+                //     case "MULTI":
+                //         multi=true;
+                //         os.write("+OK\r\n".getBytes());
+                //         break;
+                //     case "EXEC":
+                //         if(multi==false) 
+                //             os.write("-ERR EXEC without MULTI\r\n".getBytes());
+                //         else {
+                //             if(commandHold.size()==0) {
+                //                 os.write("*0\r\n".getBytes());   
+                //             }
+                //         }
+                //         multi = false;
+                //         break;
+                //     default:
+                //         break;
+                // }
             }
         }   
+    }
+
+    public static boolean chooseCommand(Socket socket, Vector<String> command, OutputStream os, Boolean multi) throws IOException, InterruptedException {
+        switch (command.get(0).toUpperCase()) {
+            case "ECHO":
+                handleEchoCommand(command, os);
+                break;
+            case "PING":
+                if(socket.equals(masterSocket)==false) //coming from client
+                    handlePingCommand(command, os);
+                else
+                    countBytes.addAndGet(14);
+                break;
+            case "SET":
+                handleSetCommand(socket, command, os);
+                break;
+            case "GET":
+                handleGetCommand(command, os);
+                break;
+            case "REPLCONF":
+                handleReplconfCommand(socket, command, os);
+                break;
+            case "INFO":
+                handleInfoCommand(command, os);
+                break;
+            case "PSYNC":
+                handlePsyncCommand(command, os);
+                break;
+            case "WAIT":
+                handleWaitCommand(command, os);
+                break;
+            case "TYPE":
+                handleTypeCommand(command, os);
+                break;
+            case "XADD":
+                handleXaddCommand(command, os);
+                break;
+            case "XRANGE":
+                handleXrangeCommand(command, os);
+                break;
+            case "XREAD":
+                handleXreadCommand(command, os);
+                break;
+            case "INCR":
+                handleIncrCommand(command, os);
+                break;
+            case "MULTI":
+                os.write("+OK\r\n".getBytes());
+                return true;
+            case "EXEC":
+                if(multi==false) 
+                    os.write("-ERR EXEC without MULTI\r\n".getBytes());
+                else {
+                    if(commandHold.size()==0) {
+                        os.write("*0\r\n".getBytes());   
+                    }
+                    else {
+                        int n = commandHold.size();
+                        os.write(("*"+n+"\r\n").getBytes());
+                        for(Vector<String> command1:commandHold) {
+                            chooseCommand(socket, command1, os, multi);
+                        }
+                    }
+                }
+                multi = false;
+                break;
+            default:
+                break;
+        }
+        return false;
     }
 
 
