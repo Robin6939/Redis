@@ -400,6 +400,14 @@ public class Main {
                 }
                 multi = false;
                 break;
+            case "DISCARD":
+                if(multi==false) {
+                    os.write("-ERR DISCARD without MULTI\r\n".getBytes());
+                }
+                else {
+                    os.write("+OK\r\n".getBytes());
+                    commandHold.clear();
+                }
             default:
                 break;
         }
