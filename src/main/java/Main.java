@@ -29,7 +29,7 @@ public class Main {
     static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();//key -> id, value -> key-val pairs
     static AtomicLong lastTimeId = new AtomicLong(-1);
     static AtomicLong lastSeqId = new AtomicLong(-1);
-    static Vector<Vector<String>> commandHold = new Vector<>();
+    // static Vector<Vector<String>> commandHold = new Vector<>();
 
 
 
@@ -152,9 +152,9 @@ public class Main {
         }
     }
 
-    public synchronized static void addCommandForExec(Vector<String> command) {
-        commandHold.add(command);
-    }
+    // public synchronized static void addCommandForExec(Vector<String> command) {
+    //     commandHold.add(command);
+    // }
 
 
 
@@ -258,6 +258,7 @@ public class Main {
         InputStream is = socket.getInputStream();
         OutputStream os = socket.getOutputStream();
         Boolean multi = false;
+        Vector<Vector<String>> commandHold = new Vector<>();
         
         while(true) {
             char ch = (char)is.read();
@@ -266,12 +267,12 @@ public class Main {
                 readCommand(is, command);
                 if(multi==true) {
                     if(command.get(0).toUpperCase().equals("EXEC")==false && command.get(0).toUpperCase().equals("DISCARD")==false) {
-                        addCommandForExec(command);
+                        commandHold.add(command);
                         os.write("+QUEUED\r\n".getBytes());
                         continue;
                     }
                 } 
-                multi = chooseCommand(socket, command, os, multi);
+                multi = chooseCommand(socket, command, os, multi, commandHold);
                 // switch (command.get(0).toUpperCase()) {
                 //     case "ECHO":
                 //         handleEchoCommand(command, os);
@@ -336,7 +337,7 @@ public class Main {
         }   
     }
 
-    public static boolean chooseCommand(Socket socket, Vector<String> command, OutputStream os, Boolean multi) throws IOException, InterruptedException {
+    public static boolean chooseCommand(Socket socket, Vector<String> command, OutputStream os, Boolean multi, Vector<Vector<String>> commandHold) throws IOException, InterruptedException {
         switch (command.get(0).toUpperCase()) {
             case "ECHO":
                 handleEchoCommand(command, os);
@@ -394,7 +395,7 @@ public class Main {
                         int n = commandHold.size();
                         os.write(("*"+n+"\r\n").getBytes());
                         for(Vector<String> command1:commandHold) {
-                            chooseCommand(socket, command1, os, multi);
+                            chooseCommand(socket, command1, os, multi, commandHold);
                         }
                     }
                 }
