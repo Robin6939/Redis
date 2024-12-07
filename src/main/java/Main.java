@@ -265,7 +265,7 @@ public class Main {
                 Vector<String> command = new Vector<>();
                 readCommand(is, command);
                 if(multi==true) {
-                    if(command.get(0).toUpperCase().equals("EXEC")==false || command.get(0).toUpperCase().equals("DISCARD")==false) {
+                    if(command.get(0).toUpperCase().equals("EXEC")==false && command.get(0).toUpperCase().equals("DISCARD")==false) {
                         addCommandForExec(command);
                         os.write("+QUEUED\r\n".getBytes());
                         continue;
