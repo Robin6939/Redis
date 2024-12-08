@@ -29,8 +29,8 @@ public class Main {
     static ConcurrentHashMap<String, ConcurrentHashMap<String, String>> streamStore = new ConcurrentHashMap<>();//key -> id, value -> key-val pairs
     static AtomicLong lastTimeId = new AtomicLong(-1);
     static AtomicLong lastSeqId = new AtomicLong(-1);
-    // static Vector<Vector<String>> commandHold = new Vector<>();
-
+    static String configDir;
+    static String configDbfileName;
 
 
 
@@ -152,16 +152,21 @@ public class Main {
         }
     }
 
-    // public synchronized static void addCommandForExec(Vector<String> command) {
-    //     commandHold.add(command);
-    // }
+    public static boolean isNumber(String s) {
+        try {
+            Integer.parseInt(s);
+            return true;
+        } catch (Exception e) {
+            return false;
+        } 
+    }
 
 
 
 
     public static void main(String args[]) throws IOException {
         System.out.println("Program started successfully!!");
-        if(args.length < 3) {
+        if(args.length < 3 || args[2].equals("--dbfilename")) {
             setupMaster(args);
         }
         else
@@ -234,7 +239,13 @@ public class Main {
     public static void setupMaster(String[] args) throws IOException {
         System.out.println("Setting up master");
         isMaster = true;
-        port = args.length==0?6379:Integer.parseInt(args[1]);
+        if(args.length>=2 && args[args.length-2].equals("--dbfilename")) {
+            configDbfileName = args[args.length-1];
+            configDir = args[args.length-3];
+        }
+        port = 6379;
+        if(args.length>1 && isNumber(args[1]) && args[0].equals("--port"))
+            port = Integer.parseInt(args[1]);
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             serverSocket.setReuseAddress(true);
             while(true) {
@@ -273,66 +284,6 @@ public class Main {
                     }
                 } 
                 multi = chooseCommand(socket, command, os, multi, commandHold);
-                // switch (command.get(0).toUpperCase()) {
-                //     case "ECHO":
-                //         handleEchoCommand(command, os);
-                //         break;
-                //     case "PING":
-                //         if(socket.equals(masterSocket)==false) //coming from client
-                //             handlePingCommand(command, os);
-                //         else
-                //             countBytes.addAndGet(14);
-                //         break;
-                //     case "SET":
-                //         handleSetCommand(socket, command, os);
-                //         break;
-                //     case "GET":
-                //         handleGetCommand(command, os);
-                //         break;
-                //     case "REPLCONF":
-                //         handleReplconfCommand(socket, command, os);
-                //         break;
-                //     case "INFO":
-                //         handleInfoCommand(command, os);
-                //         break;
-                //     case "PSYNC":
-                //         handlePsyncCommand(command, os);
-                //         break;
-                //     case "WAIT":
-                //         handleWaitCommand(command, os);
-                //         break;
-                //     case "TYPE":
-                //         handleTypeCommand(command, os);
-                //         break;
-                //     case "XADD":
-                //         handleXaddCommand(command, os);
-                //         break;
-                //     case "XRANGE":
-                //         handleXrangeCommand(command, os);
-                //         break;
-                //     case "XREAD":
-                //         handleXreadCommand(command, os);
-                //         break;
-                //     case "INCR":
-                //         handleIncrCommand(command, os);
-                //         break;
-                //     case "MULTI":
-                //         multi=true;
-                //         os.write("+OK\r\n".getBytes());
-                //         break;
-                //     case "EXEC":
-                //         if(multi==false) 
-                //             os.write("-ERR EXEC without MULTI\r\n".getBytes());
-                //         else {
-                //             if(commandHold.size()==0) {
-                //                 os.write("*0\r\n".getBytes());   
-                //             }
-                //         }
-                //         multi = false;
-                //         break;
-                //     default:
-                //         break;
-                // }
             }
         }   
     }
@@ -409,6 +360,10 @@ public class Main {
                     os.write("+OK\r\n".getBytes());
                     commandHold.clear();
                 }
+                break;
+            case "CONFIG":
+                handleConfig(command, os);
+                break;
             default:
                 break;
         }
@@ -882,6 +837,20 @@ public class Main {
             dataStore.put(var, "1");
             send(1, os);
         }
+    }
+
+    public static void handleConfig(Vector<String> command, OutputStream os) throws IOException {
+        String toSend[] = new String[2];
+        if(command.get(2).equals("dir")) {
+            toSend[0] = "dir";
+            toSend[1] = configDir;
+        }
+        else {
+
+            toSend[0] = "dbfilename";
+            toSend[1] = configDbfileName;
+        }
+        send(toSend, os);
     }
 }
     
