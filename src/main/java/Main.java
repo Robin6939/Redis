@@ -1,3 +1,5 @@
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -364,6 +366,8 @@ public class Main {
             case "CONFIG":
                 handleConfig(command, os);
                 break;
+            case "KEYS":
+                handleKeysCommand(command, os);
             default:
                 break;
         }
@@ -851,6 +855,68 @@ public class Main {
             toSend[1] = configDbfileName;
         }
         send(toSend, os);
+    }
+
+    public static void handleKeysCommand(Vector<String> command, OutputStream os) throws IOException {
+        File file = new File(configDir+"/"+configDbfileName);
+        try (InputStream fileReader = new FileInputStream(file)) {
+            System.out.println("Trying to find file in directory location: "+configDir+"/"+configDbfileName);
+            if(file.exists()) {
+                int n = (int)file.length();
+                while(n-->0) {
+                    byte ba[] = new byte[1];
+                    fileReader.read(ba);
+                    byte b = ba[0];
+                    byte x = (byte)(b & 0xFF);
+                    char ch = (char)x;
+                    System.out.println(b+" "+x+" "+ch);
+                    if(!(b>=(byte)32 && b<=(byte)126)) {
+                        System.out.println("Non printable character: "+String.format("\\u%04X", (int) ch));
+                        if(String.format("\\u%04X", (int) ch).equals("\\uFFFB")) {
+                            System.out.println("Found FB");
+                            byte bb[] = new byte[4];
+                            fileReader.read(bb);
+                            byte x1 = (byte)(bb[3] & 0xFF);
+                            char ch1 = (char)x1;
+                            int sizeOfKey = (int)ch1;
+                            System.out.println(sizeOfKey);
+                            byte key[] = new byte[sizeOfKey];
+                            fileReader.read(key);
+                            String s = new String(key);
+                            String arr[] = new String[1];
+                            arr[0]=s;
+                            send(arr, os);
+                            break;
+                        }
+                    }
+                }
+
+
+                // System.out.println("File found");
+                // byte[] bArr = new byte[(int)file.length()];
+                // fileReader.read(bArr);
+                // for(byte b:bArr) {
+                //     if(b>=(byte)32 && b<=(byte)126) //printable characters
+                //         System.out.print((char)b);
+                //     else {
+                //         byte x = (byte)(b & 0xFF);
+                //         char ch = (char)x;
+                //         switch (ch) {
+                //             case '\n': System.out.println("\\n"); break; // New line
+                //             case '\t': System.out.println("\\t"); break; // Horizontal Tab
+                //             case '\r': System.out.println("\\r"); break; // Carriage Return
+                //             default:
+                //                 System.out.println(String.format("\\u%04X", (int) ch)); 
+                //                 System.out.println(((int) ch)); // Unicode hex value
+                //         }
+                //     }
+                // }
+            }
+            else 
+                System.out.println("File not found");
+        }
+        // if(command.get(1).equals("*"))
+        //     os.write("Working on this right now".getBytes());
     }
 }
     
