@@ -280,26 +280,24 @@ public class Main {
                     byte b = ba[0];
                     byte x = (byte)(b & 0xFF);
                     char ch = (char)x;
-                    System.out.println(b+" "+x+" "+ch);
                     if(!(b>=(byte)32 && b<=(byte)126)) {
                         if(String.format("\\u%04X", (int) ch).equals("\\uFFFB")) {
-                            System.out.println("Found FB");
                             byte bb[] = new byte[4];
                             fileReader.read(bb);
-                            byte x1 = (byte)(bb[3] & 0xFF);
-                            char ch1 = (char)x1;
-                            int sizeOfKey = (int)ch1;
-                            System.out.println(sizeOfKey);
-                            byte key[] = new byte[sizeOfKey];
-                            fileReader.read(key);
-                            String keyString = new String(key);
-                            byte valueSize[] = new byte[1];
-                            fileReader.read(valueSize);
-                            int sizeOfValue = (bb[3] & 0xFF);
-                            byte value[] = new byte[sizeOfValue];
-                            fileReader.read(value);
-                            String valueString = new String(value);
-                            persistenceKeysValues.put(keyString, valueString);
+                            int numberOfPairs = (bb[0] & 0xFF);
+                            while(numberOfPairs-->0) {
+                                int sizeOfKey = (bb[3] & 0xFF);
+                                byte key[] = new byte[sizeOfKey];
+                                fileReader.read(key);
+                                String keyString = new String(key);
+                                byte valueSize[] = new byte[1];
+                                fileReader.read(valueSize);
+                                int sizeOfValue = (valueSize[0] & 0xFF);
+                                byte value[] = new byte[sizeOfValue];
+                                fileReader.read(value);
+                                String valueString = new String(value);
+                                persistenceKeysValues.put(keyString, valueString);
+                            }
                         }
                     }
                 }
