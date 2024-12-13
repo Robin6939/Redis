@@ -33,6 +33,7 @@ public class Main {
     static AtomicLong lastSeqId = new AtomicLong(-1);
     static String configDir;
     static String configDbfileName;
+    static ConcurrentHashMap<String, String> persistenceKeysValues = new ConcurrentHashMap<>();
 
 
 
@@ -244,6 +245,7 @@ public class Main {
         if(args.length>=2 && args[args.length-2].equals("--dbfilename")) {
             configDbfileName = args[args.length-1];
             configDir = args[args.length-3];
+            syncRDB();
         }
         port = 6379;
         if(args.length>1 && isNumber(args[1]) && args[0].equals("--port"))
@@ -265,6 +267,48 @@ public class Main {
             System.err.println("Server exception: " + e.getMessage());
         }
 
+    }
+
+    public static void syncRDB() {
+        File rdbFile = new File(configDir+"/"+configDbfileName);
+        try (InputStream fileReader = new FileInputStream(rdbFile)) {
+            if(rdbFile.exists()) {
+                int n = (int)rdbFile.length();
+                while(n-->0) {
+                    byte ba[] = new byte[1];
+                    fileReader.read(ba);
+                    byte b = ba[0];
+                    byte x = (byte)(b & 0xFF);
+                    char ch = (char)x;
+                    System.out.println(b+" "+x+" "+ch);
+                    if(!(b>=(byte)32 && b<=(byte)126)) {
+                        if(String.format("\\u%04X", (int) ch).equals("\\uFFFB")) {
+                            System.out.println("Found FB");
+                            byte bb[] = new byte[4];
+                            fileReader.read(bb);
+                            byte x1 = (byte)(bb[3] & 0xFF);
+                            char ch1 = (char)x1;
+                            int sizeOfKey = (int)ch1;
+                            System.out.println(sizeOfKey);
+                            byte key[] = new byte[sizeOfKey];
+                            fileReader.read(key);
+                            String keyString = new String(key);
+                            byte valueSize[] = new byte[1];
+                            fileReader.read(valueSize);
+                            int sizeOfValue = (bb[3] & 0xFF);
+                            byte value[] = new byte[sizeOfValue];
+                            fileReader.read(value);
+                            String valueString = new String(value);
+                            persistenceKeysValues.put(keyString, valueString);
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        
     }
 
     public static void handleClients(Socket socket) throws IOException, InterruptedException {
@@ -402,8 +446,8 @@ public class Main {
             }
         });
         while(isSent.get()==false) {
-            if(dataStore.getOrDefault(key, null)!=null) {
-                send(dataStore.getOrDefault(key, null), os);
+            if(dataStore.getOrDefault(key, persistenceKeysValues.getOrDefault(key, null))!=null) {
+                send(dataStore.getOrDefault(key, persistenceKeysValues.getOrDefault(key, null)), os);
                 isSent.set(true);
             }
         }
@@ -858,65 +902,13 @@ public class Main {
     }
 
     public static void handleKeysCommand(Vector<String> command, OutputStream os) throws IOException {
-        File file = new File(configDir+"/"+configDbfileName);
-        try (InputStream fileReader = new FileInputStream(file)) {
-            System.out.println("Trying to find file in directory location: "+configDir+"/"+configDbfileName);
-            if(file.exists()) {
-                int n = (int)file.length();
-                while(n-->0) {
-                    byte ba[] = new byte[1];
-                    fileReader.read(ba);
-                    byte b = ba[0];
-                    byte x = (byte)(b & 0xFF);
-                    char ch = (char)x;
-                    System.out.println(b+" "+x+" "+ch);
-                    if(!(b>=(byte)32 && b<=(byte)126)) {
-                        System.out.println("Non printable character: "+String.format("\\u%04X", (int) ch));
-                        if(String.format("\\u%04X", (int) ch).equals("\\uFFFB")) {
-                            System.out.println("Found FB");
-                            byte bb[] = new byte[4];
-                            fileReader.read(bb);
-                            byte x1 = (byte)(bb[3] & 0xFF);
-                            char ch1 = (char)x1;
-                            int sizeOfKey = (int)ch1;
-                            System.out.println(sizeOfKey);
-                            byte key[] = new byte[sizeOfKey];
-                            fileReader.read(key);
-                            String s = new String(key);
-                            String arr[] = new String[1];
-                            arr[0]=s;
-                            send(arr, os);
-                            break;
-                        }
-                    }
-                }
-
-
-                // System.out.println("File found");
-                // byte[] bArr = new byte[(int)file.length()];
-                // fileReader.read(bArr);
-                // for(byte b:bArr) {
-                //     if(b>=(byte)32 && b<=(byte)126) //printable characters
-                //         System.out.print((char)b);
-                //     else {
-                //         byte x = (byte)(b & 0xFF);
-                //         char ch = (char)x;
-                //         switch (ch) {
-                //             case '\n': System.out.println("\\n"); break; // New line
-                //             case '\t': System.out.println("\\t"); break; // Horizontal Tab
-                //             case '\r': System.out.println("\\r"); break; // Carriage Return
-                //             default:
-                //                 System.out.println(String.format("\\u%04X", (int) ch)); 
-                //                 System.out.println(((int) ch)); // Unicode hex value
-                //         }
-                //     }
-                // }
-            }
-            else 
-                System.out.println("File not found");
+        int size = persistenceKeysValues.size();
+        String toSend[] = new String[size];
+        int i = 0;
+        for(String key:persistenceKeysValues.keySet()) {
+            toSend[i++] = key;
         }
-        // if(command.get(1).equals("*"))
-        //     os.write("Working on this right now".getBytes());
+        send(toSend, os);
     }
 }
     
