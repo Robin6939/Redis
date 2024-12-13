@@ -285,9 +285,11 @@ public class Main {
                             byte bb[] = new byte[3];
                             fileReader.read(bb);
                             int numberOfPairs = (bb[0] & 0xFF);
+                            System.out.println(bb[0]+" "+bb[1]+" "+bb[2]);
                             while(numberOfPairs-->0) {
                                 byte keySize[] = new byte[1];
                                 fileReader.read(keySize);
+                                System.out.println(keySize[0]);
                                 int sizeOfKey = (keySize[0] & 0xFF);
                                 byte key[] = new byte[sizeOfKey];
                                 fileReader.read(key);
@@ -299,7 +301,7 @@ public class Main {
                                 byte value[] = new byte[sizeOfValue];
                                 fileReader.read(value);
                                 String valueString = new String(value);
-                                
+
                                 persistenceKeysValues.put(keyString, valueString);
                             }
                         }
