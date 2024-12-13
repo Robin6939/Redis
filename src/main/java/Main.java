@@ -282,15 +282,13 @@ public class Main {
                     char ch = (char)x;
                     if(!(b>=(byte)32 && b<=(byte)126)) {
                         if(String.format("\\u%04X", (int) ch).equals("\\uFFFB")) {
-                            byte bb[] = new byte[3];
+                            byte bb[] = new byte[2];
                             fileReader.read(bb);
                             int numberOfPairs = (bb[0] & 0xFF);
-                            System.out.println(bb[0]+" "+bb[1]+" "+bb[2]);
                             while(numberOfPairs-->0) {
-                                byte keySize[] = new byte[1];
+                                byte keySize[] = new byte[2];
                                 fileReader.read(keySize);
-                                System.out.println(keySize[0]);
-                                int sizeOfKey = (keySize[0] & 0xFF);
+                                int sizeOfKey = (keySize[1] & 0xFF);
                                 byte key[] = new byte[sizeOfKey];
                                 fileReader.read(key);
                                 String keyString = new String(key);
